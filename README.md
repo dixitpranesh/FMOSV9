@@ -17,12 +17,20 @@ cp .env.example .env
 composer dump-autoload
 php bin/migrate.php
 php bin/seed.php
-php -S localhost:8080 -t public public/router.php
+php -S 127.0.0.1:8088 -t public public/router.php
 ```
 
-Open http://localhost:8080
+Open http://127.0.0.1:8088
 
 Default demo user (after seed): `owner@demo.fmos` / `Password123!`
+
+## Tests
+
+```bash
+php tests/run.php
+set FMOS_BASE_URL=http://127.0.0.1:8088
+php tests/e2e_mvp.php
+```
 
 ## Docs
 

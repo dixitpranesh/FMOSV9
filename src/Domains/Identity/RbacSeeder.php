@@ -107,7 +107,12 @@ final class RbacSeeder
         }
 
         foreach (self::roleCodes() as $code) {
-            $stmt = $pdo->prepare('INSERT IGNORE INTO roles (tenant_id, code, name, is_system, created_at) VALUES (NULL, ?, ?, 1, NOW())');
+            $check = $pdo->prepare('SELECT id FROM roles WHERE code = ? AND tenant_id IS NULL LIMIT 1');
+            $check->execute([$code]);
+            if ($check->fetch()) {
+                continue;
+            }
+            $stmt = $pdo->prepare('INSERT INTO roles (tenant_id, code, name, is_system, created_at) VALUES (NULL, ?, ?, 1, NOW())');
             $stmt->execute([$code, str_replace('_', ' ', $code)]);
         }
 
