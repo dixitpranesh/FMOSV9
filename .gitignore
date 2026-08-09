@@ -1,0 +1,26 @@
+# Environment
+.env
+.env.local
+
+# Dependencies / runtime
+/vendor/
+composer.lock
+
+# Storage
+/storage/logs/*
+/storage/uploads/*
+/storage/exports/*
+!/storage/logs/.gitkeep
+!/storage/uploads/.gitkeep
+!/storage/exports/.gitkeep
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Test artifacts
+/tests/output/
+.phpunit.result.cache

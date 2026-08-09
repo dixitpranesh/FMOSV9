@@ -1,0 +1,5 @@
+<?php
+
+declare(strict_types=1);
+
+/** Phase route modules loaded by routes.php — Phase 0 has none beyond health/ping. */

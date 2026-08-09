@@ -93,9 +93,14 @@ See `06_DECISION_REGISTER.md` and chat DECISION REQUIRED blocks. Top blockers:
 
 ---
 
-## 6–8. Architecture / Roadmap / Risks
+## 6. Recommended Implementation Strategy
 
-**Deferred** until decisions are recorded. Preliminary recommendation (non-binding): treat Vision/BRD/SRS as priority authority; treat specialized specs as detailed design for approved scope; freeze one panel FSM and one role catalog before coding.
+See **`24_IMPLEMENTATION_ROADMAP.md`**.
+
+**MVP (Option B):** Phases **0–10** (~design-to-cut).  
+**Post-MVP:** Phases **11–14** (factory, white-label, advanced CNC, AI).
+
+Working assumption: HIGH defaults in Decision Register §OPEN used for planning until owner confirms.
 
 ---
 
