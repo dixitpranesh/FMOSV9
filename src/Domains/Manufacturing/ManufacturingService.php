@@ -61,11 +61,14 @@ final class ManufacturingService
 
         $panels = [];
         if (!$hasBlocker) {
+            $panelSeq = 0;
             foreach ($furniture['components'] as $idx => $c) {
                 if (($c['type'] ?? '') === 'HARDWARE') {
                     continue;
                 }
-                $publicId = sprintf('P-%d-%d-%d', $projectId, $furnitureId, $idx + 1);
+                $panelSeq++;
+                // Unique per package revision — regenerating same furniture must not collide
+                $publicId = sprintf('P-%d-%d-R%d-%d', $projectId, $furnitureId, $rev, $panelSeq);
                 $stmt = $pdo->prepare('INSERT INTO panels (tenant_id, project_id, manufacturing_package_id, furniture_id, public_id, name, material_name, thickness_mm, length_mm, width_mm, quantity, grain_direction, edge_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
                 $stmt->execute([
                     $tenantId, $projectId, $pkgId, $furnitureId, $publicId, $c['name'], 'Board',

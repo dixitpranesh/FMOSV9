@@ -12,9 +12,9 @@ export function renderLogin() {
       <p class="muted">Design-to-Manufacturing Operating System</p>
       <form id="login-form">
         <label>Email</label>
-        <input name="email" type="email" required value="owner@demo.fmos" />
+        <input name="email" type="email" autocomplete="username" required value="owner@demo.fmos" />
         <label>Password</label>
-        <input name="password" type="password" required value="Password123!" />
+        <input name="password" type="password" autocomplete="current-password" required value="Password123!" />
         <button type="submit">Sign in</button>
         <p id="login-error" class="error"></p>
       </form>

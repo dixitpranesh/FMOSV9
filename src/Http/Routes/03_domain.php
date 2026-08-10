@@ -138,11 +138,16 @@ $router->post('/api/v1/quotations/{id}/status', static function (Request $reques
 
 $router->post('/api/v1/manufacturing/generate', static function (Request $request) {
     Auth::requirePermission('manufacturing.generate');
-    Response::json((new ManufacturingService())->validateAndGenerate(
-        Auth::requireTenant(),
-        (int) $request->input('project_id'),
-        (int) $request->input('furniture_id'),
-    ), 201);
+    try {
+        Response::json((new ManufacturingService())->validateAndGenerate(
+            Auth::requireTenant(),
+            (int) $request->input('project_id'),
+            (int) $request->input('furniture_id'),
+        ), 201);
+    } catch (\Throwable $e) {
+        \Fmos\Core\Logger::error('manufacturing.generate failed', ['error' => $e->getMessage()]);
+        Response::error('JOB_FAILED', $e->getMessage(), 500);
+    }
 });
 
 $router->post('/api/v1/manufacturing/{id}/release', static function (Request $r, array $p) {
