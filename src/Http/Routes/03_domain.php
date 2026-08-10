@@ -143,6 +143,21 @@ $router->put('/api/v1/furniture/instances/{id}/parameters', static function (Req
     ));
 });
 
+$router->put('/api/v1/furniture/instances/{id}/specification', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $payload = [];
+    foreach (['exterior_finish_id', 'interior_finish_id', 'material_id', 'specification', 'name', 'code', 'quantity'] as $key) {
+        if (array_key_exists($key, $request->body)) {
+            $payload[$key] = $request->body[$key];
+        }
+    }
+    Response::json((new FurnitureEngine())->updateMeta(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $payload
+    ));
+});
+
 $router->put('/api/v1/furniture/instances/{id}', static function (Request $request, array $p) {
     Auth::requirePermission('furniture.update');
     $payload = [];

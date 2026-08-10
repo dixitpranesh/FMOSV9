@@ -12,7 +12,7 @@ final class Auth
 
     public static function startSession(): void
     {
-        if (session_status() === PHP_SESSION_ACTIVE) {
+        if (PHP_SAPI === 'cli' || session_status() === PHP_SESSION_ACTIVE) {
             return;
         }
         $name = Env::get('SESSION_NAME', 'fmos_session') ?? 'fmos_session';
