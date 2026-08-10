@@ -50,6 +50,10 @@ export async function mountFurniture(main) {
       </div>
       <p id="spec-msg" class="muted"></p>
     </div>
+    <div id="furn-components" class="panel" style="margin-top:1rem;display:none">
+      <h3>Components</h3>
+      <div id="comp-list"></div>
+    </div>
   </div>`;
 
   let selectedId = localStorage.getItem('fmos_furniture_id') || '';
@@ -67,6 +71,41 @@ export async function mountFurniture(main) {
   document.getElementById('spec-exterior').onchange = () => paintPreview('spec-exterior', 'spec-exterior-preview');
   document.getElementById('spec-interior').onchange = () => paintPreview('spec-interior', 'spec-interior-preview');
 
+  const renderComponents = async (furnitureId) => {
+    const res = await api.get(`/api/v1/furniture/instances/${furnitureId}/components`);
+    const rows = (res.data || []).map((c) => {
+      const finishSku = c.finish_id ? (byId[String(c.finish_id)]?.sku || c.finish_id) : '—';
+      return `<tr>
+        <td>${c.component_key}</td>
+        <td>${c.name}</td>
+        <td>${c.component_type}</td>
+        <td>${c.length_mm}×${c.width_mm}×${c.thickness_mm}</td>
+        <td>${c.quantity}</td>
+        <td>${finishSku}</td>
+        <td>
+          <select data-cid="${c.id}" class="comp-finish">
+            <option value="">default</option>
+            ${lamOptions}
+          </select>
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('furn-components').style.display = 'block';
+    document.getElementById('comp-list').innerHTML = `
+      <table><thead><tr><th>Key</th><th>Name</th><th>Type</th><th>Size</th><th>Qty</th><th>Finish</th><th>Override</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    document.querySelectorAll('.comp-finish').forEach((sel) => {
+      const row = (res.data || []).find((c) => String(c.id) === sel.dataset.cid);
+      if (row?.finish_id) sel.value = String(row.finish_id);
+      sel.onchange = async () => {
+        await api.put(`/api/v1/furniture/instances/${furnitureId}/components/${sel.dataset.cid}`, {
+          finish_id: sel.value ? Number(sel.value) : null,
+        });
+        renderComponents(furnitureId);
+      };
+    });
+  };
+
   const openSpec = async (id) => {
     selectedId = String(id);
     localStorage.setItem('fmos_furniture_id', selectedId);
@@ -80,6 +119,7 @@ export async function mountFurniture(main) {
     paintPreview('spec-exterior', 'spec-exterior-preview');
     paintPreview('spec-interior', 'spec-interior-preview');
     document.getElementById('spec-msg').textContent = '';
+    await renderComponents(selectedId);
   };
 
   const refresh = async () => {

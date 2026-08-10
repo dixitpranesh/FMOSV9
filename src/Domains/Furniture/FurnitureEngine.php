@@ -426,6 +426,85 @@ final class FurnitureEngine
         return $this->get($tenantId, $furnitureId);
     }
 
+    public function updateComponent(int $tenantId, int $furnitureId, int $componentId, array $data): array
+    {
+        $this->get($tenantId, $furnitureId);
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('SELECT * FROM furniture_components WHERE id=? AND furniture_id=? AND tenant_id=? AND deleted_at IS NULL');
+        $stmt->execute([$componentId, $furnitureId, $tenantId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new \RuntimeException('Component not found');
+        }
+
+        $fields = [];
+        $params = [];
+        foreach (['name', 'component_type', 'status'] as $col) {
+            if (array_key_exists($col, $data)) {
+                $fields[] = "{$col} = ?";
+                $params[] = $data[$col];
+            }
+        }
+        if (array_key_exists('quantity', $data)) {
+            $fields[] = 'quantity = ?';
+            $params[] = max(1, (int) $data['quantity']);
+        }
+        foreach (['length_mm', 'width_mm', 'thickness_mm'] as $col) {
+            if (array_key_exists($col, $data)) {
+                $fields[] = "{$col} = ?";
+                $params[] = (float) $data[$col];
+            }
+        }
+        foreach (['material_id', 'finish_id', 'parent_component_id'] as $col) {
+            if (array_key_exists($col, $data)) {
+                $fields[] = "{$col} = ?";
+                $params[] = $data[$col] !== null && $data[$col] !== '' ? (int) $data[$col] : null;
+            }
+        }
+        if (array_key_exists('geometry', $data)) {
+            $fields[] = 'geometry_json = ?';
+            $params[] = json_encode($data['geometry']);
+        }
+        if (array_key_exists('manufacturing_data', $data)) {
+            $fields[] = 'manufacturing_data_json = ?';
+            $params[] = json_encode($data['manufacturing_data']);
+        }
+        if ($fields === []) {
+            return $this->getComponent($tenantId, $furnitureId, $componentId);
+        }
+        $fields[] = 'updated_at = NOW()';
+        $params[] = $componentId;
+        $params[] = $tenantId;
+        $pdo->prepare('UPDATE furniture_components SET ' . implode(', ', $fields) . ' WHERE id = ? AND tenant_id = ?')
+            ->execute($params);
+        Audit::record('UPDATE', 'furniture_component', $componentId, $row, $data);
+        return $this->getComponent($tenantId, $furnitureId, $componentId);
+    }
+
+    public function getComponent(int $tenantId, int $furnitureId, int $componentId): array
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('SELECT * FROM furniture_components WHERE id=? AND furniture_id=? AND tenant_id=? AND deleted_at IS NULL');
+        $stmt->execute([$componentId, $furnitureId, $tenantId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new \RuntimeException('Component not found');
+        }
+        $row['geometry'] = json_decode($row['geometry_json'] ?? 'null', true);
+        $row['manufacturing_data'] = json_decode($row['manufacturing_data_json'] ?? 'null', true);
+        unset($row['geometry_json'], $row['manufacturing_data_json']);
+        return $row;
+    }
+
+    public function softDeleteComponent(int $tenantId, int $furnitureId, int $componentId): void
+    {
+        $this->getComponent($tenantId, $furnitureId, $componentId);
+        $pdo = Database::connection();
+        $pdo->prepare('UPDATE furniture_components SET deleted_at=NOW(), status=?, updated_at=NOW() WHERE id=? AND furniture_id=? AND tenant_id=?')
+            ->execute(['DELETED', $componentId, $furnitureId, $tenantId]);
+        Audit::record('DELETE', 'furniture_component', $componentId);
+    }
+
     /**
      * Dual-write: JSON remains cache; table is canonical component store.
      *

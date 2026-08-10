@@ -187,6 +187,33 @@ $router->get('/api/v1/materials/{id}', static function (Request $r, array $p) {
     Response::json((new MaterialService())->get(Auth::requireTenant(), (int) $p['id']));
 });
 
+$router->get('/api/v1/furniture/instances/{id}/components', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new FurnitureEngine())->listComponentRows(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->put('/api/v1/furniture/instances/{id}/components/{cid}', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $payload = [];
+    foreach (['name', 'component_type', 'quantity', 'length_mm', 'width_mm', 'thickness_mm', 'material_id', 'finish_id', 'parent_component_id', 'geometry', 'manufacturing_data', 'status'] as $key) {
+        if (array_key_exists($key, $request->body)) {
+            $payload[$key] = $request->body[$key];
+        }
+    }
+    Response::json((new FurnitureEngine())->updateComponent(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        (int) $p['cid'],
+        $payload
+    ));
+});
+
+$router->delete('/api/v1/furniture/instances/{id}/components/{cid}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.update');
+    (new FurnitureEngine())->softDeleteComponent(Auth::requireTenant(), (int) $p['id'], (int) $p['cid']);
+    Response::json(['deleted' => true]);
+});
+
 $router->post('/api/v1/commercial/generate', static function (Request $request) {
     Auth::requirePermission('bom.generate');
     Response::json((new CommercialService())->generateBomBoqPrice(
