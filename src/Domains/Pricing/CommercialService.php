@@ -110,7 +110,7 @@ final class CommercialService
         $board->execute([$tenantId]);
         $boardProduct = $board->fetch() ?: ['id' => null, 'name' => 'Board', 'cost' => 45, 'selling_price' => 65, 'uom' => 'SQ_FT'];
 
-        $bomNumber = 'BOM-' . $projectId . '-' . $furnitureId . '-' . time();
+        $bomNumber = 'BOM-' . $projectId . '-' . $furnitureId . '-' . time() . '-' . bin2hex(random_bytes(3));
         $stmt = $pdo->prepare('INSERT INTO bom_headers (tenant_id, project_id, furniture_id, bom_number, current_revision, status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, NOW(), NOW())');
         $stmt->execute([$tenantId, $projectId, $furnitureId, $bomNumber, 'GENERATED']);
         $bomId = (int) $pdo->lastInsertId();
