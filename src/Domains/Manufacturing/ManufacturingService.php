@@ -14,7 +14,8 @@ final class ManufacturingService
     public function validateAndGenerate(int $tenantId, int $projectId, int $furnitureId): array
     {
         $engine = new FurnitureEngine();
-        $furniture = $engine->get($tenantId, $furnitureId);
+        // Rebuild sheet-fit components from current params (fixes oversized Top/Bottom/Shelf/Shutter)
+        $furniture = $engine->refreshComponents($tenantId, $furnitureId);
         $issues = [];
         foreach ($furniture['parameters'] as $k => $v) {
             if (!is_numeric($v)) {
@@ -30,8 +31,11 @@ final class ManufacturingService
             $fits = ($l <= 2440 && $w <= 1220) || ($w <= 2440 && $l <= 1220);
             if (!$fits) {
                 $issues[] = ['severity' => 'BLOCKER', 'code' => 'PANEL_SIZE', 'message' => $c['name'] . ' exceeds sheet even with rotation'];
-            } elseif ($l > 2440 || $w > 1220) {
+            } elseif (($l > 2440 || $w > 1220) || ($w > 2440 || $l > 1220)) {
                 $issues[] = ['severity' => 'WARNING', 'code' => 'PANEL_ROTATE', 'message' => $c['name'] . ' requires rotation to fit sheet'];
+            }
+            if (!empty($c['note'])) {
+                $issues[] = ['severity' => 'INFO', 'code' => 'PANEL_SPLIT', 'message' => $c['name'] . ': ' . $c['note']];
             }
         }
         $hasBlocker = (bool) array_filter($issues, static fn ($i) => $i['severity'] === 'BLOCKER');
