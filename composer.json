@@ -14,6 +14,7 @@
     "migrate": "php bin/migrate.php",
     "seed": "php bin/seed.php",
     "test": "php tests/run.php",
-    "e2e": "php tests/e2e_mvp.php"
+    "e2e": "php tests/e2e_mvp.php",
+    "e2e:cr": "php tests/e2e_furniture_centric.php"
   }
 }

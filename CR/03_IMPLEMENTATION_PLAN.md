@@ -1,6 +1,6 @@
 # CR-001 Phased Implementation Plan
 
-**Status:** **APPROVED** by owner (`APPROVE CR-001 PLAN`) — implementation in progress  
+**Status:** **APPROVED** — Phases 0–15 wardrobe vertical slice implemented (2026-08-10)  
 **Scope:** Full CR (CRD-006=A)  
 **Decisions:** CRD-001–012  
 **Approved:** 2026-08-10  

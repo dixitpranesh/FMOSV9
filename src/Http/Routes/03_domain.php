@@ -10,7 +10,9 @@ use Fmos\Core\Response;
 use Fmos\Domains\Architecture\DesignService;
 use Fmos\Domains\Catalog\CatalogService;
 use Fmos\Domains\Catalog\MaterialService;
+use Fmos\Domains\Export\ExportService;
 use Fmos\Domains\Furniture\FurnitureEngine;
+use Fmos\Domains\Furniture\FurnitureViewService;
 use Fmos\Domains\Manufacturing\ManufacturingService;
 use Fmos\Domains\Pricing\CommercialService;
 
@@ -212,6 +214,75 @@ $router->delete('/api/v1/furniture/instances/{id}/components/{cid}', static func
     Auth::requirePermission('furniture.update');
     (new FurnitureEngine())->softDeleteComponent(Auth::requireTenant(), (int) $p['id'], (int) $p['cid']);
     Response::json(['deleted' => true]);
+});
+
+$router->get('/api/v1/furniture/instances/{id}/2d', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new FurnitureViewService())->drawing2d(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        (string) ($request->input('view') ?? 'FRONT')
+    ));
+});
+
+$router->get('/api/v1/furniture/instances/{id}/3d-model', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new FurnitureViewService())->model3d(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->post('/api/v1/furniture/instances/{id}/validate', static function (Request $r, array $p) {
+    Auth::requirePermission('manufacturing.generate');
+    Response::json((new ManufacturingService())->validateFurniture(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->post('/api/v1/projects/{id}/manufacturing', static function (Request $request, array $p) {
+    Auth::requirePermission('manufacturing.generate');
+    $ids = $request->input('furniture_ids') ?? [];
+    if (!is_array($ids)) {
+        $ids = [];
+    }
+    Response::json((new ManufacturingService())->createProjectManufacturing(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $ids
+    ), 201);
+});
+
+$router->get('/api/v1/manufacturing/{id}/cutlist', static function (Request $request, array $p) {
+    Auth::requirePermission('manufacturing.view');
+    Response::json((new ManufacturingService())->cutlist(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $request->input('scope')
+    ));
+});
+
+$router->post('/api/v1/manufacturing/{id}/cutlist/export', static function (Request $r, array $p) {
+    Auth::requirePermission('manufacturing.view');
+    Response::json((new ExportService())->manufacturingPackageCsv(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->post('/api/v1/furniture/instances/{id}/export/design', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new ExportService())->designHtml(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        (string) ($request->input('view') ?? 'FRONT')
+    ));
+});
+
+$router->put('/api/v1/nesting/{id}/placement', static function (Request $request, array $p) {
+    Auth::requirePermission('nesting.generate');
+    Response::json((new ManufacturingService())->updateNestPlacement(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        (array) $request->body
+    ));
+});
+
+$router->post('/api/v1/nesting/{id}/reoptimize', static function (Request $r, array $p) {
+    Auth::requirePermission('nesting.generate');
+    Response::json((new ManufacturingService())->renestPreservingLocks(Auth::requireTenant(), (int) $p['id']), 201);
 });
 
 $router->post('/api/v1/commercial/generate', static function (Request $request) {
