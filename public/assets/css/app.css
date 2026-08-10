@@ -97,3 +97,8 @@ canvas { display: block; width: 100%; background: #fafbfc; }
 .finish-preview { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; min-height: 2.5rem; }
 .finish-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
 tr.row-active { background: #f3faf7; }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.65rem; margin: 0.5rem 0 1rem; }
+.tpl-card { text-align: left; background: #fff; color: #1c2430; border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.tpl-card:hover { border-color: var(--accent); }
+.bay-card { border: 1px solid var(--line); border-radius: 8px; padding: 0.65rem; margin-bottom: 0.65rem; background: #fafbfc; }
+.sec-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin: 0.35rem 0; }

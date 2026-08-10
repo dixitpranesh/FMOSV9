@@ -12,38 +12,20 @@ final class FurnitureEngine
     public function ensureTemplates(): void
     {
         $pdo = Database::connection();
-        $templates = [
-            'WARDROBE' => [
-                'name' => 'Wardrobe',
-                'category' => 'WARDROBE',
-                'parameters' => [
-                    'width' => ['default' => 2400, 'min' => 600, 'max' => 3600, 'unit' => 'mm'],
-                    'height' => ['default' => 2400, 'min' => 1200, 'max' => 2700, 'unit' => 'mm'],
-                    'depth' => ['default' => 600, 'min' => 400, 'max' => 700, 'unit' => 'mm'],
-                    'carcass_thickness' => ['default' => 18, 'min' => 12, 'max' => 25, 'unit' => 'mm'],
-                    'back_thickness' => ['default' => 6, 'min' => 3, 'max' => 12, 'unit' => 'mm'],
-                    'shelf_count' => ['default' => 3, 'min' => 0, 'max' => 10, 'unit' => 'pcs'],
-                    'shutter_count' => ['default' => 2, 'min' => 1, 'max' => 6, 'unit' => 'pcs'],
-                ],
-            ],
-            'KITCHEN_BASE' => [
-                'name' => 'Kitchen Base Unit',
-                'category' => 'KITCHEN_BASE',
-                'parameters' => [
-                    'width' => ['default' => 600, 'min' => 300, 'max' => 1200, 'unit' => 'mm'],
-                    'height' => ['default' => 720, 'min' => 600, 'max' => 900, 'unit' => 'mm'],
-                    'depth' => ['default' => 560, 'min' => 450, 'max' => 650, 'unit' => 'mm'],
-                    'carcass_thickness' => ['default' => 18, 'min' => 12, 'max' => 25, 'unit' => 'mm'],
-                    'shelf_count' => ['default' => 1, 'min' => 0, 'max' => 4, 'unit' => 'pcs'],
-                    'shutter_count' => ['default' => 1, 'min' => 1, 'max' => 2, 'unit' => 'pcs'],
-                ],
-            ],
-        ];
-
-        foreach ($templates as $code => $tpl) {
+        foreach (FurnitureTemplateCatalog::all() as $code => $tpl) {
             $check = $pdo->prepare('SELECT id FROM furniture_templates WHERE code = ? AND tenant_id IS NULL AND version = 1');
             $check->execute([$code]);
-            if ($check->fetch()) {
+            $existing = $check->fetch();
+            if ($existing) {
+                $stmt = $pdo->prepare('UPDATE furniture_templates SET name=?, category=?, parameters_json=?, rules_json=?, status=?, updated_at=NOW() WHERE id=?');
+                $stmt->execute([
+                    $tpl['name'],
+                    $tpl['category'],
+                    json_encode($tpl['parameters']),
+                    json_encode(['engine' => 'layout_v1', 'description' => $tpl['description'] ?? '']),
+                    'PUBLISHED',
+                    (int) $existing['id'],
+                ]);
                 continue;
             }
             $stmt = $pdo->prepare('INSERT INTO furniture_templates (tenant_id, code, name, category, version, parameters_json, rules_json, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, 1, ?, ?, ?, NOW(), NOW())');
@@ -52,10 +34,25 @@ final class FurnitureEngine
                 $tpl['name'],
                 $tpl['category'],
                 json_encode($tpl['parameters']),
-                json_encode(['engine' => 'deterministic_v1']),
+                json_encode(['engine' => 'layout_v1', 'description' => $tpl['description'] ?? '']),
                 'PUBLISHED',
             ]);
         }
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function listTemplates(): array
+    {
+        $this->ensureTemplates();
+        $pdo = Database::connection();
+        $rows = $pdo->query("SELECT id, code, name, category, version, parameters_json, rules_json FROM furniture_templates WHERE status='PUBLISHED' ORDER BY category, name")->fetchAll();
+        return array_map(static function (array $row): array {
+            $row['parameters'] = json_decode($row['parameters_json'] ?? '{}', true) ?: [];
+            $row['rules'] = json_decode($row['rules_json'] ?? '{}', true) ?: [];
+            $row['description'] = $row['rules']['description'] ?? '';
+            unset($row['parameters_json'], $row['rules_json']);
+            return $row;
+        }, $rows);
     }
 
     public function createInstance(int $tenantId, array $data): array
@@ -70,14 +67,8 @@ final class FurnitureEngine
         }
         $defs = json_decode($template['parameters_json'], true);
         $values = $data['parameters'] ?? [];
-        foreach ($defs as $key => $def) {
-            if (!array_key_exists($key, $values)) {
-                $values[$key] = $def['default'];
-            }
-            if ($values[$key] < $def['min'] || $values[$key] > $def['max']) {
-                throw new \RuntimeException("Invalid parameter {$key}");
-            }
-        }
+        $values = $this->applyParameterDefaults($defs, $values);
+        $this->validateParameters($defs, $values);
 
         $roomId = array_key_exists('room_id', $data) && $data['room_id'] !== null && $data['room_id'] !== ''
             ? (int) $data['room_id']
@@ -140,11 +131,8 @@ final class FurnitureEngine
         $template = $stmt->fetch();
         $defs = json_decode($template['parameters_json'], true);
         $values = array_merge($instance['parameters'], $parameters);
-        foreach ($defs as $key => $def) {
-            if ($values[$key] < $def['min'] || $values[$key] > $def['max']) {
-                throw new \RuntimeException("Invalid parameter {$key}");
-            }
-        }
+        $values = $this->applyParameterDefaults($defs, $values);
+        $this->validateParameters($defs, $values);
         $components = $this->generateComponents($template['code'], $values, $tenantId);
         $stmt = $pdo->prepare("UPDATE furniture_instances SET parameter_values_json=?, components_json=?, width_mm=?, height_mm=?, depth_mm=?, revision=revision+1, stale_flags_json=?, updated_at=NOW() WHERE id=? AND tenant_id=?");
         $stmt->execute([
@@ -240,35 +228,75 @@ final class FurnitureEngine
         }, $stmt->fetchAll());
     }
 
+    public function updateLayout(int $tenantId, int $id, array $layout): array
+    {
+        $instance = $this->get($tenantId, $id);
+        $layoutEngine = new FurnitureLayoutEngine();
+        $normalized = $layoutEngine->normalizeLayout([
+            'layout' => $layout,
+            'carcass_thickness' => $instance['parameters']['carcass_thickness'] ?? 18,
+            'door_type' => $layout['door_type'] ?? ($instance['parameters']['door_type'] ?? 'HINGED'),
+        ]);
+        return $this->updateParameters($tenantId, $id, [
+            'layout' => $normalized,
+            'door_type' => $normalized['door_type'] ?? 'HINGED',
+        ]);
+    }
+
     /** @return list<array<string,mixed>> */
     public function generateComponents(string $code, array $p, ?int $tenantId = null): array
     {
-        $t = (float) $p['carcass_thickness'];
-        $w = (float) $p['width'];
-        $h = (float) $p['height'];
-        $d = (float) $p['depth'];
-        $internalW = $w - (2 * $t);
-        $shelfCount = (int) ($p['shelf_count'] ?? 0);
-        $shutterCount = (int) ($p['shutter_count'] ?? 1);
-
-        $logical = [
-            ['name' => 'Left Side', 'length_mm' => $h, 'width_mm' => $d, 'thickness_mm' => $t, 'qty' => 1, 'type' => 'PANEL'],
-            ['name' => 'Right Side', 'length_mm' => $h, 'width_mm' => $d, 'thickness_mm' => $t, 'qty' => 1, 'type' => 'PANEL'],
-            ['name' => 'Top', 'length_mm' => $internalW, 'width_mm' => $d, 'thickness_mm' => $t, 'qty' => 1, 'type' => 'PANEL'],
-            ['name' => 'Bottom', 'length_mm' => $internalW, 'width_mm' => $d, 'thickness_mm' => $t, 'qty' => 1, 'type' => 'PANEL'],
-            ['name' => 'Back', 'length_mm' => $h, 'width_mm' => $w, 'thickness_mm' => (float) ($p['back_thickness'] ?? 6), 'qty' => 1, 'type' => 'PANEL'],
-        ];
-
-        if ($shelfCount > 0) {
-            $logical[] = ['name' => 'Shelf', 'length_mm' => $internalW, 'width_mm' => max(1, $d - $t), 'thickness_mm' => $t, 'qty' => $shelfCount, 'type' => 'PANEL'];
-        }
-
-        $shutterW = $internalW / max(1, $shutterCount);
-        $logical[] = ['name' => 'Shutter', 'length_mm' => $h, 'width_mm' => $shutterW, 'thickness_mm' => $t, 'qty' => $shutterCount, 'type' => 'PANEL'];
-        $logical[] = ['name' => 'Hinge', 'length_mm' => 0, 'width_mm' => 0, 'thickness_mm' => 0, 'qty' => $shutterCount * 2, 'type' => 'HARDWARE'];
-
+        $logical = (new FurnitureLayoutEngine())->generate($code, $p);
         $sheet = $this->resolveDefaultSheet($tenantId);
         return $this->normalizeToSheet($logical, (float) $sheet['length_mm'], (float) $sheet['width_mm']);
+    }
+
+    /**
+     * @param array<string,mixed> $defs
+     * @param array<string,mixed> $values
+     * @return array<string,mixed>
+     */
+    private function applyParameterDefaults(array $defs, array $values): array
+    {
+        foreach ($defs as $key => $def) {
+            if (!array_key_exists($key, $values)) {
+                $values[$key] = $def['default'] ?? null;
+            }
+        }
+        if (!isset($values['layout']) || !is_array($values['layout'])) {
+            // keep as-is; layout engine will synthesize legacy layout
+        }
+        return $values;
+    }
+
+    /**
+     * @param array<string,mixed> $defs
+     * @param array<string,mixed> $values
+     */
+    private function validateParameters(array $defs, array $values): void
+    {
+        foreach ($defs as $key => $def) {
+            if (!array_key_exists($key, $values)) {
+                continue;
+            }
+            $type = $def['type'] ?? 'number';
+            if ($type === 'layout' || $type === 'object' || is_array($values[$key])) {
+                continue;
+            }
+            if ($type === 'enum') {
+                $opts = $def['options'] ?? [];
+                if ($opts !== [] && !in_array($values[$key], $opts, true)) {
+                    throw new \RuntimeException("Invalid parameter {$key}");
+                }
+                continue;
+            }
+            if (!is_numeric($values[$key])) {
+                throw new \RuntimeException("Invalid parameter {$key}");
+            }
+            if (isset($def['min'], $def['max']) && ($values[$key] < $def['min'] || $values[$key] > $def['max'])) {
+                throw new \RuntimeException("Invalid parameter {$key}");
+            }
+        }
     }
 
     /**

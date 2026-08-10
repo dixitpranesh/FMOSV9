@@ -6,28 +6,73 @@ function finishThumb(m) {
   return url ? `<img src="${url}" alt="${m.sku}" class="finish-thumb" />` : '';
 }
 
+function clone(v) {
+  return JSON.parse(JSON.stringify(v));
+}
+
+function defaultSection(type = 'SHELVES') {
+  if (type === 'DRAWERS') return { type: 'DRAWERS', height_mm: 600, drawer_count: 3, drawer_height_mm: 180, label: 'Drawers' };
+  if (type === 'HANGING') return { type: 'HANGING', height_mm: 1100, label: 'Hanging' };
+  if (type === 'OPEN') return { type: 'OPEN', height_mm: null, label: 'Open' };
+  return { type: 'SHELVES', height_mm: null, shelf_count: 3, label: 'Shelves' };
+}
+
 export async function mountFurniture(main) {
   const projectId = localStorage.getItem('fmos_project_id');
   if (!projectId) {
     main.innerHTML = `<div class="panel"><p class="muted">Select a project first.</p></div>`;
     return;
   }
-  const project = await api.get(`/api/v1/projects/${projectId}`);
+  const [project, laminatesRes, templatesRes] = await Promise.all([
+    api.get(`/api/v1/projects/${projectId}`),
+    api.get('/api/v1/materials?category=LAMINATE'),
+    api.get('/api/v1/furniture/templates'),
+  ]);
   const mode = project.data.model_mode || 'FURNITURE_FIRST';
   const room = project.data.buildings?.[0]?.floors?.[0]?.rooms?.[0] || null;
-  const laminatesRes = await api.get('/api/v1/materials?category=LAMINATE');
   const laminates = laminatesRes.data || [];
+  const templates = templatesRes.data || [];
   const lamOptions = laminates.map((m) => `<option value="${m.id}">${m.sku} (${m.series_name || m.series_code || ''})</option>`).join('');
+  const byId = Object.fromEntries(laminates.map((m) => [String(m.id), m]));
+  const templatesByCode = Object.fromEntries(templates.map((t) => [t.code, t]));
 
   main.innerHTML = `<div class="panel">
     <h2>Furniture <span class="muted" style="font-size:.85rem">(${mode})</span></h2>
-    <div class="toolbar">
+    <h3>Add from template</h3>
+    <div id="tpl-grid" class="tpl-grid"></div>
+    <div class="toolbar" style="margin-top:.75rem">
       <label>Code <input id="furn-code" placeholder="auto" style="width:9rem"></label>
       <label>Qty <input id="furn-qty" type="number" min="1" value="1" style="width:4rem"></label>
-      <button id="add-wardrobe">Add Wardrobe 2400</button>
-      <button id="resize" class="secondary">Resize to 2700</button>
+      <label>Width <input id="furn-width" type="number" value="2400" style="width:5rem"></label>
+      <label>Height <input id="furn-height" type="number" value="2400" style="width:5rem"></label>
+      <label>Depth <input id="furn-depth" type="number" value="600" style="width:5rem"></label>
     </div>
     <div id="furn-list"></div>
+
+    <div id="furn-params" class="panel" style="margin-top:1rem;display:none">
+      <h3>Dimensions & doors</h3>
+      <div class="grid grid-2" id="param-fields"></div>
+      <button id="save-params">Apply dimensions</button>
+      <span id="params-msg" class="muted"></span>
+    </div>
+
+    <div id="furn-layout" class="panel" style="margin-top:1rem;display:none">
+      <h3>Internal layout (customizable)</h3>
+      <div class="toolbar">
+        <label>Plinth mm <input id="lay-plinth" type="number" style="width:5rem"></label>
+        <label>Partition mm <input id="lay-part" type="number" style="width:5rem"></label>
+        <label>Door
+          <select id="lay-door"><option>HINGED</option><option>SLIDING</option><option>NONE</option></select>
+        </label>
+        <label><input id="lay-loft" type="checkbox"> Loft</label>
+        <label>Loft H <input id="lay-loft-h" type="number" style="width:5rem"></label>
+        <button id="add-bay" class="secondary">Add bay</button>
+        <button id="save-layout">Save layout & regenerate</button>
+      </div>
+      <div id="bay-editor"></div>
+      <p id="layout-msg" class="muted"></p>
+    </div>
+
     <div id="furn-spec" class="panel" style="margin-top:1rem;display:none">
       <h3>Specification</h3>
       <p class="muted" id="spec-title"></p>
@@ -50,10 +95,12 @@ export async function mountFurniture(main) {
       </div>
       <p id="spec-msg" class="muted"></p>
     </div>
+
     <div id="furn-components" class="panel" style="margin-top:1rem;display:none">
-      <h3>Components</h3>
+      <h3>Generated components</h3>
       <div id="comp-list"></div>
     </div>
+
     <div id="furn-views" class="panel" style="margin-top:1rem;display:none">
       <h3>2D / 3D</h3>
       <div class="toolbar">
@@ -72,8 +119,45 @@ export async function mountFurniture(main) {
   </div>`;
 
   let selectedId = localStorage.getItem('fmos_furniture_id') || '';
+  let currentFurniture = null;
+  let draftLayout = null;
+  let renderer3d = null;
 
-  const byId = Object.fromEntries(laminates.map((m) => [String(m.id), m]));
+  document.getElementById('tpl-grid').innerHTML = templates.map((t) => `
+    <button class="tpl-card" data-code="${t.code}">
+      <strong>${t.name}</strong>
+      <span class="badge">${t.category}</span>
+      <span class="muted">${t.description || ''}</span>
+    </button>`).join('');
+
+  document.querySelectorAll('.tpl-card').forEach((btn) => {
+    btn.onclick = async () => {
+      const code = btn.dataset.code;
+      const tpl = templatesByCode[code];
+      const width = Number(document.getElementById('furn-width').value || tpl.parameters.width?.default || 1200);
+      const height = Number(document.getElementById('furn-height').value || tpl.parameters.height?.default || 2100);
+      const depth = Number(document.getElementById('furn-depth').value || tpl.parameters.depth?.default || 600);
+      const payload = {
+        template_code: code,
+        project_id: Number(projectId),
+        name: tpl.name,
+        code: document.getElementById('furn-code').value || undefined,
+        quantity: Number(document.getElementById('furn-qty').value || 1),
+        parameters: {
+          width, height, depth,
+          carcass_thickness: tpl.parameters.carcass_thickness?.default ?? 18,
+          back_thickness: tpl.parameters.back_thickness?.default ?? 6,
+          shutter_count: tpl.parameters.shutter_count?.default ?? 2,
+          door_type: tpl.parameters.door_type?.default ?? 'HINGED',
+          layout: clone(tpl.parameters.layout?.default || null),
+        },
+      };
+      if (mode === 'LEGACY' && room) payload.room_id = room.id;
+      const created = await api.post('/api/v1/furniture/instances', payload);
+      selectedId = String(created.data.id);
+      await refresh();
+    };
+  });
 
   const paintPreview = (selectId, previewId) => {
     const id = document.getElementById(selectId).value;
@@ -82,33 +166,77 @@ export async function mountFurniture(main) {
       ? `${finishThumb(m)}<span>${m.sku} · ${m.series_name || ''}</span>`
       : '<span class="muted">No finish</span>';
   };
-
   document.getElementById('spec-exterior').onchange = () => paintPreview('spec-exterior', 'spec-exterior-preview');
   document.getElementById('spec-interior').onchange = () => paintPreview('spec-interior', 'spec-interior-preview');
+
+  const renderBayEditor = () => {
+    const host = document.getElementById('bay-editor');
+    if (!draftLayout) { host.innerHTML = ''; return; }
+    host.innerHTML = (draftLayout.bays || []).map((bay, bi) => `
+      <div class="bay-card">
+        <div class="toolbar">
+          <strong>Bay ${bi + 1}</strong>
+          <input data-bi="${bi}" class="bay-label" value="${bay.label || ''}" placeholder="Label" />
+          <label>Width mm <input data-bi="${bi}" class="bay-width" type="number" placeholder="auto" value="${bay.width_mm ?? ''}" style="width:5rem"></label>
+          <button data-bi="${bi}" class="add-sec secondary">Add section</button>
+          <button data-bi="${bi}" class="del-bay danger">Remove bay</button>
+        </div>
+        ${(bay.sections || []).map((sec, si) => `
+          <div class="sec-row">
+            <select data-bi="${bi}" data-si="${si}" class="sec-type">
+              ${['HANGING','SHELVES','DRAWERS','OPEN'].map((t) => `<option ${sec.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+            <input data-bi="${bi}" data-si="${si}" class="sec-label" value="${sec.label || ''}" placeholder="Label" />
+            <label>H <input data-bi="${bi}" data-si="${si}" class="sec-h" type="number" placeholder="auto" value="${sec.height_mm ?? ''}" style="width:4.5rem"></label>
+            <label>Shelves <input data-bi="${bi}" data-si="${si}" class="sec-shelves" type="number" value="${sec.shelf_count ?? 0}" style="width:3.5rem"></label>
+            <label>Drawers <input data-bi="${bi}" data-si="${si}" class="sec-drawers" type="number" value="${sec.drawer_count ?? 0}" style="width:3.5rem"></label>
+            <label>Dr H <input data-bi="${bi}" data-si="${si}" class="sec-drh" type="number" value="${sec.drawer_height_mm ?? 180}" style="width:3.5rem"></label>
+            <button data-bi="${bi}" data-si="${si}" class="del-sec secondary">✕</button>
+          </div>`).join('')}
+      </div>`).join('') || '<p class="muted">No bays — add one.</p>';
+
+    host.querySelectorAll('.bay-label').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].label = el.value; });
+    host.querySelectorAll('.bay-width').forEach((el) => el.oninput = () => {
+      draftLayout.bays[el.dataset.bi].width_mm = el.value === '' ? null : Number(el.value);
+    });
+    host.querySelectorAll('.add-sec').forEach((el) => el.onclick = () => {
+      draftLayout.bays[el.dataset.bi].sections.push(defaultSection('SHELVES'));
+      renderBayEditor();
+    });
+    host.querySelectorAll('.del-bay').forEach((el) => el.onclick = () => {
+      draftLayout.bays.splice(Number(el.dataset.bi), 1);
+      renderBayEditor();
+    });
+    host.querySelectorAll('.sec-type').forEach((el) => el.onchange = () => {
+      const sec = draftLayout.bays[el.dataset.bi].sections[el.dataset.si];
+      Object.assign(sec, defaultSection(el.value), { label: sec.label || el.value });
+      renderBayEditor();
+    });
+    host.querySelectorAll('.sec-label').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].label = el.value; });
+    host.querySelectorAll('.sec-h').forEach((el) => el.oninput = () => {
+      draftLayout.bays[el.dataset.bi].sections[el.dataset.si].height_mm = el.value === '' ? null : Number(el.value);
+    });
+    host.querySelectorAll('.sec-shelves').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].shelf_count = Number(el.value || 0); });
+    host.querySelectorAll('.sec-drawers').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].drawer_count = Number(el.value || 0); });
+    host.querySelectorAll('.sec-drh').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].drawer_height_mm = Number(el.value || 180); });
+    host.querySelectorAll('.del-sec').forEach((el) => el.onclick = () => {
+      draftLayout.bays[el.dataset.bi].sections.splice(Number(el.dataset.si), 1);
+      renderBayEditor();
+    });
+  };
 
   const renderComponents = async (furnitureId) => {
     const res = await api.get(`/api/v1/furniture/instances/${furnitureId}/components`);
     const rows = (res.data || []).map((c) => {
       const finishSku = c.finish_id ? (byId[String(c.finish_id)]?.sku || c.finish_id) : '—';
       return `<tr>
-        <td>${c.component_key}</td>
-        <td>${c.name}</td>
-        <td>${c.component_type}</td>
-        <td>${c.length_mm}×${c.width_mm}×${c.thickness_mm}</td>
-        <td>${c.quantity}</td>
-        <td>${finishSku}</td>
-        <td>
-          <select data-cid="${c.id}" class="comp-finish">
-            <option value="">default</option>
-            ${lamOptions}
-          </select>
-        </td>
+        <td>${c.component_key}</td><td>${c.name}</td><td>${c.component_type}</td>
+        <td>${c.length_mm}×${c.width_mm}×${c.thickness_mm}</td><td>${c.quantity}</td><td>${finishSku}</td>
+        <td><select data-cid="${c.id}" class="comp-finish"><option value="">default</option>${lamOptions}</select></td>
       </tr>`;
     }).join('');
     document.getElementById('furn-components').style.display = 'block';
-    document.getElementById('comp-list').innerHTML = `
-      <table><thead><tr><th>Key</th><th>Name</th><th>Type</th><th>Size</th><th>Qty</th><th>Finish</th><th>Override</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
+    document.getElementById('comp-list').innerHTML = `<table><thead><tr><th>Key</th><th>Name</th><th>Type</th><th>Size</th><th>Qty</th><th>Finish</th><th>Override</th></tr></thead><tbody>${rows}</tbody></table>`;
     document.querySelectorAll('.comp-finish').forEach((sel) => {
       const row = (res.data || []).find((c) => String(c.id) === sel.dataset.cid);
       if (row?.finish_id) sel.value = String(row.finish_id);
@@ -133,16 +261,24 @@ export async function mountFurniture(main) {
     const bw = Math.max(1, d.bounds.width || 1);
     const bh = Math.max(1, view === 'PLAN' ? d.bounds.depth : d.bounds.height);
     const scale = Math.min((canvas.width - 80) / bw, (canvas.height - 80) / bh);
-    const ox = 50;
-    const oy = 40;
+    const ox = 50; const oy = 40;
     const mapX = (x) => ox + x * scale;
     const mapY = (y) => oy + y * scale;
+    const colors = { bay: '#dfe9f2', hanging: '#e8f5e9', shelves: '#fff8e1', drawers: '#fce4ec', open: '#f3f5f7', loft: '#e3f2fd', plinth: '#eceff1' };
     d.elements.forEach((el) => {
-      ctx.strokeStyle = el.role === 'shutter' ? '#0f6a5a' : '#1c2430';
-      ctx.lineWidth = el.role === 'inner' ? 1 : 2;
       if (el.type === 'rect') {
+        ctx.fillStyle = colors[el.role] || 'transparent';
+        if (colors[el.role]) ctx.fillRect(mapX(el.x), mapY(el.y), el.w * scale, el.h * scale);
+        ctx.strokeStyle = el.role === 'shutter' ? '#0f6a5a' : '#1c2430';
+        ctx.lineWidth = el.role === 'inner' ? 1 : 2;
         ctx.strokeRect(mapX(el.x), mapY(el.y), el.w * scale, el.h * scale);
+        if (el.label && el.w * scale > 40) {
+          ctx.fillStyle = '#334';
+          ctx.font = '11px sans-serif';
+          ctx.fillText(el.label, mapX(el.x) + 4, mapY(el.y) + 14);
+        }
       } else if (el.type === 'line') {
+        ctx.strokeStyle = '#666';
         ctx.beginPath();
         ctx.moveTo(mapX(el.x1), mapY(el.y1));
         ctx.lineTo(mapX(el.x2), mapY(el.y2));
@@ -152,15 +288,10 @@ export async function mountFurniture(main) {
     ctx.fillStyle = '#c00';
     ctx.font = '12px sans-serif';
     d.dimensions.forEach((dim) => {
-      const x = mapX((dim.from[0] + dim.to[0]) / 2);
-      const y = mapY((dim.from[1] + dim.to[1]) / 2);
-      ctx.fillText(String(dim.label), x, Math.max(12, y));
+      ctx.fillText(String(dim.label), mapX((dim.from[0] + dim.to[0]) / 2), Math.max(12, mapY((dim.from[1] + dim.to[1]) / 2)));
     });
-    ctx.fillStyle = '#445';
-    ctx.fillText(`${d.title_block.furniture} · ${d.title_block.code || ''} · Rev ${d.title_block.revision}`, 12, canvas.height - 10);
   };
 
-  let renderer3d = null;
   const draw3d = async (furnitureId) => {
     const host = document.getElementById('furn-3d');
     host.innerHTML = '';
@@ -192,11 +323,7 @@ export async function mountFurniture(main) {
         const tex = loader.load(mesh.finish.texture_url);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(Math.max(1, mesh.size[0] / 400), Math.max(1, mesh.size[1] / 400));
-        material = new THREE.MeshStandardMaterial({
-          map: tex,
-          roughness: mesh.finish.roughness ?? 0.55,
-          metalness: mesh.finish.metalness ?? 0,
-        });
+        material = new THREE.MeshStandardMaterial({ map: tex, roughness: mesh.finish.roughness ?? 0.55, metalness: mesh.finish.metalness ?? 0 });
       } else {
         material = new THREE.MeshStandardMaterial({ color: mesh.color || '#d7dee5', roughness: 0.7 });
       }
@@ -207,20 +334,40 @@ export async function mountFurniture(main) {
     renderer3d.render(scene, camera);
   };
 
-  const openSpec = async (id) => {
+  const openFurniture = async (id) => {
     selectedId = String(id);
     localStorage.setItem('fmos_furniture_id', selectedId);
     const res = await api.get(`/api/v1/furniture/instances/${selectedId}`);
-    const f = res.data;
+    currentFurniture = res.data;
+    const f = currentFurniture;
+    const p = f.parameters || {};
+    draftLayout = clone(p.layout || { plinth_height_mm: 0, partition_thickness_mm: 18, door_type: 'HINGED', loft: { enabled: false, height_mm: 600, shelf_count: 1 }, bays: [] });
+
+    document.getElementById('furn-params').style.display = 'block';
+    document.getElementById('furn-layout').style.display = 'block';
     document.getElementById('furn-spec').style.display = 'block';
     document.getElementById('furn-views').style.display = 'block';
-    document.getElementById('spec-title').textContent = `${f.code || ''} · ${f.name} · ${f.width_mm}×${f.height_mm}×${f.depth_mm} mm`;
+    document.getElementById('param-fields').innerHTML = `
+      <div><label>Width</label><input id="p-width" type="number" value="${p.width || f.width_mm || ''}"></div>
+      <div><label>Height</label><input id="p-height" type="number" value="${p.height || f.height_mm || ''}"></div>
+      <div><label>Depth</label><input id="p-depth" type="number" value="${p.depth || f.depth_mm || ''}"></div>
+      <div><label>Shutters/Doors</label><input id="p-shutters" type="number" value="${p.shutter_count ?? 2}"></div>
+      <div><label>Carcass thk</label><input id="p-cth" type="number" value="${p.carcass_thickness ?? 18}"></div>
+      <div><label>Back thk</label><input id="p-bth" type="number" value="${p.back_thickness ?? 6}"></div>`;
+
+    document.getElementById('lay-plinth').value = draftLayout.plinth_height_mm ?? 0;
+    document.getElementById('lay-part').value = draftLayout.partition_thickness_mm ?? 18;
+    document.getElementById('lay-door').value = draftLayout.door_type || p.door_type || 'HINGED';
+    document.getElementById('lay-loft').checked = !!draftLayout.loft?.enabled;
+    document.getElementById('lay-loft-h').value = draftLayout.loft?.height_mm ?? 600;
+    renderBayEditor();
+
+    document.getElementById('spec-title').textContent = `${f.code || ''} · ${f.name} · ${f.width_mm}×${f.height_mm}×${f.depth_mm} mm · ${(f.component_rows || []).length} parts`;
     document.getElementById('spec-exterior').value = f.exterior_finish_id || '';
     document.getElementById('spec-interior').value = f.interior_finish_id || '';
     document.getElementById('spec-notes').value = f.specification?.notes || '';
     paintPreview('spec-exterior', 'spec-exterior-preview');
     paintPreview('spec-interior', 'spec-interior-preview');
-    document.getElementById('spec-msg').textContent = '';
     await renderComponents(selectedId);
     await draw2d(selectedId);
     await draw3d(selectedId);
@@ -230,76 +377,72 @@ export async function mountFurniture(main) {
     const res = await api.get(`/api/v1/projects/${projectId}/furniture`);
     if (!selectedId && res.data[0]?.id) selectedId = String(res.data[0].id);
     localStorage.setItem('fmos_furniture_id', selectedId || '');
-    const rows = (res.data || []).map((f) => {
-      const comps = f.component_rows?.length ?? f.components?.length ?? 0;
-      const ext = f.exterior_finish_id ? (byId[String(f.exterior_finish_id)]?.sku || f.exterior_finish_id) : '—';
-      return `<tr class="${String(f.id) === selectedId ? 'row-active' : ''}">
-        <td>${f.code || ''}</td>
-        <td>${f.name || ''}</td>
-        <td>${f.quantity ?? 1}</td>
-        <td>${f.width_mm || ''}×${f.height_mm || ''}×${f.depth_mm || ''}</td>
-        <td>${ext}</td>
-        <td>${f.room_id ?? '—'}</td>
-        <td>${comps}</td>
-        <td><button data-id="${f.id}" class="open-spec secondary">Spec</button></td>
-      </tr>`;
-    }).join('');
-    document.getElementById('furn-list').innerHTML = `
-      <table class="data">
-        <thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>W×H×D</th><th>Exterior</th><th>Room</th><th>Components</th><th></th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="8" class="muted">No furniture yet</td></tr>'}</tbody>
-      </table>`;
-    document.querySelectorAll('.open-spec').forEach((btn) => {
-      btn.onclick = () => openSpec(btn.dataset.id);
-    });
-    if (selectedId) openSpec(selectedId);
+    const rows = (res.data || []).map((f) => `<tr class="${String(f.id) === selectedId ? 'row-active' : ''}">
+      <td>${f.code || ''}</td><td>${f.name || ''}</td><td>${f.type || ''}</td>
+      <td>${f.width_mm || ''}×${f.height_mm || ''}×${f.depth_mm || ''}</td>
+      <td>${(f.parameters?.layout?.bays || []).length || '—'}</td>
+      <td><button data-id="${f.id}" class="open-furn secondary">Open</button></td>
+    </tr>`).join('');
+    document.getElementById('furn-list').innerHTML = `<table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>W×H×D</th><th>Bays</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">No furniture — pick a template above</td></tr>'}</tbody></table>`;
+    document.querySelectorAll('.open-furn').forEach((btn) => { btn.onclick = () => openFurniture(btn.dataset.id); });
+    if (selectedId) await openFurniture(selectedId);
   };
 
-  document.getElementById('add-wardrobe').onclick = async () => {
-    const payload = {
-      template_code: 'WARDROBE',
-      project_id: Number(projectId),
-      name: 'Master Wardrobe',
-      code: document.getElementById('furn-code').value || undefined,
-      quantity: Number(document.getElementById('furn-qty').value || 1),
-      parameters: { width: 2400, height: 2400, depth: 600, carcass_thickness: 18, back_thickness: 6, shelf_count: 3, shutter_count: 2 },
-      position: { x: 100, y: 100, z: 0, rotation: 0 },
-    };
-    if (mode === 'LEGACY' && room) payload.room_id = room.id;
-    const created = await api.post('/api/v1/furniture/instances', payload);
-    selectedId = String(created.data.id);
-    refresh();
+  document.getElementById('add-bay').onclick = () => {
+    if (!draftLayout) return;
+    draftLayout.bays.push({ id: `bay-${Date.now()}`, label: `Bay ${draftLayout.bays.length + 1}`, width_mm: null, sections: [defaultSection('SHELVES')] });
+    renderBayEditor();
   };
-  document.getElementById('resize').onclick = async () => {
+  document.getElementById('save-layout').onclick = async () => {
+    if (!selectedId || !draftLayout) return;
+    draftLayout.plinth_height_mm = Number(document.getElementById('lay-plinth').value || 0);
+    draftLayout.partition_thickness_mm = Number(document.getElementById('lay-part').value || 18);
+    draftLayout.door_type = document.getElementById('lay-door').value;
+    draftLayout.loft = {
+      enabled: document.getElementById('lay-loft').checked,
+      height_mm: Number(document.getElementById('lay-loft-h').value || 600),
+      shelf_count: draftLayout.loft?.shelf_count ?? 1,
+    };
+    await api.put(`/api/v1/furniture/instances/${selectedId}/layout`, { layout: draftLayout });
+    await api.put(`/api/v1/furniture/instances/${selectedId}/parameters`, {
+      parameters: { door_type: draftLayout.door_type, shutter_count: Number(document.getElementById('p-shutters')?.value || 2) },
+    });
+    document.getElementById('layout-msg').textContent = 'Layout saved — components regenerated.';
+    await refresh();
+  };
+  document.getElementById('save-params').onclick = async () => {
     if (!selectedId) return;
-    await api.put(`/api/v1/furniture/instances/${selectedId}/parameters`, { parameters: { width: 2700 } });
-    refresh();
+    await api.put(`/api/v1/furniture/instances/${selectedId}/parameters`, {
+      parameters: {
+        width: Number(document.getElementById('p-width').value),
+        height: Number(document.getElementById('p-height').value),
+        depth: Number(document.getElementById('p-depth').value),
+        shutter_count: Number(document.getElementById('p-shutters').value),
+        carcass_thickness: Number(document.getElementById('p-cth').value),
+        back_thickness: Number(document.getElementById('p-bth').value),
+      },
+    });
+    document.getElementById('params-msg').textContent = 'Dimensions applied.';
+    await refresh();
   };
   document.getElementById('save-spec').onclick = async () => {
     if (!selectedId) return;
-    const exterior = document.getElementById('spec-exterior').value;
-    const interior = document.getElementById('spec-interior').value;
     await api.put(`/api/v1/furniture/instances/${selectedId}/specification`, {
-      exterior_finish_id: exterior ? Number(exterior) : null,
-      interior_finish_id: interior ? Number(interior) : null,
+      exterior_finish_id: document.getElementById('spec-exterior').value ? Number(document.getElementById('spec-exterior').value) : null,
+      interior_finish_id: document.getElementById('spec-interior').value ? Number(document.getElementById('spec-interior').value) : null,
       specification: { notes: document.getElementById('spec-notes').value || '' },
     });
     document.getElementById('spec-msg').textContent = 'Saved.';
-    refresh();
+    await refresh();
   };
   document.getElementById('view2d').onchange = () => selectedId && draw2d(selectedId);
-  document.getElementById('reload-views').onclick = async () => {
-    if (!selectedId) return;
-    await draw2d(selectedId);
-    await draw3d(selectedId);
-  };
+  document.getElementById('reload-views').onclick = async () => { if (!selectedId) return; await draw2d(selectedId); await draw3d(selectedId); };
   document.getElementById('export-design').onclick = async () => {
     if (!selectedId) return;
-    const view = document.getElementById('view2d').value;
-    const res = await api.post(`/api/v1/furniture/instances/${selectedId}/export/design`, { view });
-    const blob = new Blob([res.data.content], { type: 'text/html' });
+    const res = await api.post(`/api/v1/furniture/instances/${selectedId}/export/design`, { view: document.getElementById('view2d').value });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = URL.createObjectURL(new Blob([res.data.content], { type: 'text/html' }));
     a.download = res.data.filename;
     a.click();
   };

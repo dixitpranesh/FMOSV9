@@ -79,9 +79,7 @@ $router->post('/api/v1/catalog/seed', static function () {
 
 $router->get('/api/v1/furniture/templates', static function () {
     Auth::requirePermission('furniture.view');
-    (new FurnitureEngine())->ensureTemplates();
-    $pdo = \Fmos\Core\Database::connection();
-    Response::json($pdo->query("SELECT id, code, name, category, version, parameters_json FROM furniture_templates WHERE status='PUBLISHED'")->fetchAll());
+    Response::json((new FurnitureEngine())->listTemplates());
 });
 
 $router->post('/api/v1/furniture/instances', static function (Request $request) {
@@ -142,6 +140,20 @@ $router->put('/api/v1/furniture/instances/{id}/parameters', static function (Req
         Auth::requireTenant(),
         (int) $p['id'],
         (array) ($request->input('parameters') ?? [])
+    ));
+});
+
+$router->put('/api/v1/furniture/instances/{id}/layout', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $layout = $request->input('layout');
+    if (!is_array($layout)) {
+        Response::error('VALIDATION', 'layout object required', 422);
+        return;
+    }
+    Response::json((new FurnitureEngine())->updateLayout(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $layout
     ));
 });
 
