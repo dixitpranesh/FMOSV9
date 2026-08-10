@@ -10,9 +10,16 @@ composer.lock
 /storage/logs/*
 /storage/uploads/*
 /storage/exports/*
+/storage/tenants/*
 !/storage/logs/.gitkeep
 !/storage/uploads/.gitkeep
 !/storage/exports/.gitkeep
+!/storage/tenants/.gitkeep
+
+# Public media (imported textures)
+/public/media/tenants/*
+!/public/media/.gitkeep
+!/public/media/tenants/.gitkeep
 
 # OS / IDE
 .DS_Store
