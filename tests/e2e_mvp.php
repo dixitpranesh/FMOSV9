@@ -115,11 +115,9 @@ try {
         assert(count($list['data']) >= 1);
     });
 
-    step('Create parametric wardrobe', function () use ($token, $projectId, $roomId, &$furnitureId) {
-        $res = req('POST', '/api/v1/furniture/instances', [
+    step('Create parametric wardrobe', function () use ($token, $projectId, &$furnitureId) {
+        $res = req('POST', '/api/v1/projects/' . $projectId . '/furniture', [
             'template_code' => 'WARDROBE',
-            'project_id' => $projectId,
-            'room_id' => $roomId,
             'name' => 'E2E Wardrobe',
             'parameters' => [
                 'width' => 2400,
@@ -132,7 +130,9 @@ try {
             ],
         ], $token);
         $furnitureId = (int) $res['data']['id'];
+        assert($res['data']['room_id'] === null);
         assert(count($res['data']['components']) >= 5);
+        assert(count($res['data']['component_rows'] ?? []) >= 5);
         // Keep manufacturable sheet size for MVP E2E (avoid BLOCKER on 18mm carcass internals)
         $resized = req('PUT', '/api/v1/furniture/instances/' . $furnitureId . '/parameters', [
             'parameters' => ['width' => 2100],

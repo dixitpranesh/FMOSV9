@@ -60,9 +60,22 @@ export const pages = {
       </form><div id="project-list"></div></div>`;
     const refresh = async () => {
       const res = await api.get('/api/v1/projects');
-      document.getElementById('project-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Workflow</th><th>Open</th></tr></thead>
-        <tbody>${res.data.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.status}</td><td>${p.workflow_stage}</td>
-          <td><button data-id="${p.id}" class="open-project secondary">Designer</button></td></tr>`).join('')}</tbody></table>`;
+      document.getElementById('project-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Mode</th><th>Status</th><th>Workflow</th><th>Open</th></tr></thead>
+        <tbody>${res.data.map(p => `<tr>
+          <td>${p.id}</td>
+          <td>${p.name}</td>
+          <td><span class="badge">${p.model_mode || 'FURNITURE_FIRST'}</span></td>
+          <td>${p.status}</td>
+          <td>${p.workflow_stage}</td>
+          <td>
+            <button data-id="${p.id}" class="open-furniture">Furniture</button>
+            <button data-id="${p.id}" class="open-project secondary">Floor</button>
+          </td>
+        </tr>`).join('')}</tbody></table>`;
+      document.querySelectorAll('.open-furniture').forEach(btn => btn.onclick = () => {
+        localStorage.setItem('fmos_project_id', btn.dataset.id);
+        location.hash = '#furniture';
+      });
       document.querySelectorAll('.open-project').forEach(btn => btn.onclick = () => {
         localStorage.setItem('fmos_project_id', btn.dataset.id);
         location.hash = '#designer';

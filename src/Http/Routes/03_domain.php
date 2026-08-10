@@ -108,6 +108,27 @@ $router->get('/api/v1/projects/{id}/furniture', static function (Request $r, arr
     Response::json((new FurnitureEngine())->listByProject(Auth::requireTenant(), (int) $p['id']));
 });
 
+$router->post('/api/v1/projects/{id}/furniture', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.create');
+    $roomInput = $request->input('room_id');
+    Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
+        'template_code' => (string) $request->input('template_code'),
+        'project_id' => (int) $p['id'],
+        'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
+        'name' => $request->input('name'),
+        'code' => $request->input('code'),
+        'category' => $request->input('category'),
+        'type' => $request->input('type'),
+        'quantity' => $request->input('quantity') ?? 1,
+        'parameters' => $request->input('parameters') ?? [],
+        'position' => $request->input('position') ?? [],
+        'material_id' => $request->input('material_id'),
+        'exterior_finish_id' => $request->input('exterior_finish_id'),
+        'interior_finish_id' => $request->input('interior_finish_id'),
+        'specification' => $request->input('specification') ?? [],
+    ]), 201);
+});
+
 $router->get('/api/v1/furniture/instances/{id}', static function (Request $r, array $p) {
     Auth::requirePermission('furniture.view');
     Response::json((new FurnitureEngine())->get(Auth::requireTenant(), (int) $p['id']));

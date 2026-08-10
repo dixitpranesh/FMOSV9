@@ -89,3 +89,8 @@ canvas { display: block; width: 100%; background: #fafbfc; }
 #view3d { height: 360px; }
 .login-wrap { max-width: 420px; margin: 4rem auto; }
 .badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 999px; background: #e8f5f1; color: var(--accent); font-size: 0.75rem; }
+.lam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; }
+.lam-card { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.lam-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #eee; }
+.lam-meta { padding: 0.45rem 0.55rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; }
+.lam-missing { aspect-ratio: 1; display: grid; place-items: center; color: var(--muted); background: #f3f5f7; }
