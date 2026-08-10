@@ -51,7 +51,7 @@ final class ProjectService
     public function createProject(int $tenantId, array $data): array
     {
         $pdo = Database::connection();
-        $stmt = $pdo->prepare('INSERT INTO projects (tenant_id, organization_id, client_id, name, project_type, status, workflow_stage, version, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())');
+        $stmt = $pdo->prepare('INSERT INTO projects (tenant_id, organization_id, client_id, name, project_type, status, workflow_stage, model_mode, version, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())');
         $stmt->execute([
             $tenantId,
             (int) $data['organization_id'],
@@ -60,6 +60,7 @@ final class ProjectService
             $data['project_type'] ?? 'INTERIOR',
             'DRAFT',
             'DRAFT',
+            $data['model_mode'] ?? 'FURNITURE_FIRST',
             Auth::id(),
         ]);
         $projectId = (int) $pdo->lastInsertId();

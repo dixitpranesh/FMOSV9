@@ -9,6 +9,7 @@ use Fmos\Core\Request;
 use Fmos\Core\Response;
 use Fmos\Domains\Architecture\DesignService;
 use Fmos\Domains\Catalog\CatalogService;
+use Fmos\Domains\Catalog\MaterialService;
 use Fmos\Domains\Furniture\FurnitureEngine;
 use Fmos\Domains\Manufacturing\ManufacturingService;
 use Fmos\Domains\Pricing\CommercialService;
@@ -83,20 +84,33 @@ $router->get('/api/v1/furniture/templates', static function () {
 
 $router->post('/api/v1/furniture/instances', static function (Request $request) {
     Auth::requirePermission('furniture.create');
+    $roomInput = $request->input('room_id');
     Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
         'template_code' => (string) $request->input('template_code'),
         'project_id' => (int) $request->input('project_id'),
-        'room_id' => (int) $request->input('room_id'),
+        'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
         'name' => $request->input('name'),
+        'code' => $request->input('code'),
+        'category' => $request->input('category'),
+        'type' => $request->input('type'),
+        'quantity' => $request->input('quantity') ?? 1,
         'parameters' => $request->input('parameters') ?? [],
         'position' => $request->input('position') ?? [],
         'material_id' => $request->input('material_id'),
+        'exterior_finish_id' => $request->input('exterior_finish_id'),
+        'interior_finish_id' => $request->input('interior_finish_id'),
+        'specification' => $request->input('specification') ?? [],
     ]), 201);
 });
 
 $router->get('/api/v1/projects/{id}/furniture', static function (Request $r, array $p) {
     Auth::requirePermission('furniture.view');
     Response::json((new FurnitureEngine())->listByProject(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->get('/api/v1/furniture/instances/{id}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new FurnitureEngine())->get(Auth::requireTenant(), (int) $p['id']));
 });
 
 $router->put('/api/v1/furniture/instances/{id}/parameters', static function (Request $request, array $p) {
@@ -106,6 +120,35 @@ $router->put('/api/v1/furniture/instances/{id}/parameters', static function (Req
         (int) $p['id'],
         (array) ($request->input('parameters') ?? [])
     ));
+});
+
+$router->put('/api/v1/furniture/instances/{id}', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $payload = [];
+    foreach (['name', 'code', 'category', 'type', 'quantity', 'room_id', 'exterior_finish_id', 'interior_finish_id', 'material_id', 'specification'] as $key) {
+        if (array_key_exists($key, $request->body)) {
+            $payload[$key] = $request->body[$key];
+        }
+    }
+    Response::json((new FurnitureEngine())->updateMeta(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $payload
+    ));
+});
+
+$router->get('/api/v1/materials', static function (Request $request) {
+    Auth::requirePermission('catalog.view');
+    Response::json((new MaterialService())->list(
+        Auth::requireTenant(),
+        $request->input('category'),
+        $request->input('series')
+    ));
+});
+
+$router->get('/api/v1/materials/{id}', static function (Request $r, array $p) {
+    Auth::requirePermission('catalog.view');
+    Response::json((new MaterialService())->get(Auth::requireTenant(), (int) $p['id']));
 });
 
 $router->post('/api/v1/commercial/generate', static function (Request $request) {
