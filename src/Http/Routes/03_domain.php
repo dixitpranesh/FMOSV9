@@ -88,22 +88,26 @@ $router->get('/api/v1/furniture/templates', static function () {
 $router->post('/api/v1/furniture/instances', static function (Request $request) {
     Auth::requirePermission('furniture.create');
     $roomInput = $request->input('room_id');
-    Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
-        'template_code' => (string) $request->input('template_code'),
-        'project_id' => (int) $request->input('project_id'),
-        'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
-        'name' => $request->input('name'),
-        'code' => $request->input('code'),
-        'category' => $request->input('category'),
-        'type' => $request->input('type'),
-        'quantity' => $request->input('quantity') ?? 1,
-        'parameters' => $request->input('parameters') ?? [],
-        'position' => $request->input('position') ?? [],
-        'material_id' => $request->input('material_id'),
-        'exterior_finish_id' => $request->input('exterior_finish_id'),
-        'interior_finish_id' => $request->input('interior_finish_id'),
-        'specification' => $request->input('specification') ?? [],
-    ]), 201);
+    try {
+        Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
+            'template_code' => (string) $request->input('template_code'),
+            'project_id' => (int) $request->input('project_id'),
+            'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
+            'name' => $request->input('name'),
+            'code' => $request->input('code'),
+            'category' => $request->input('category'),
+            'type' => $request->input('type'),
+            'quantity' => $request->input('quantity') ?? 1,
+            'parameters' => $request->input('parameters') ?? [],
+            'position' => $request->input('position') ?? [],
+            'material_id' => $request->input('material_id'),
+            'exterior_finish_id' => $request->input('exterior_finish_id'),
+            'interior_finish_id' => $request->input('interior_finish_id'),
+            'specification' => $request->input('specification') ?? [],
+        ]), 201);
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
 });
 
 $router->get('/api/v1/projects/{id}/furniture', static function (Request $r, array $p) {
@@ -114,22 +118,26 @@ $router->get('/api/v1/projects/{id}/furniture', static function (Request $r, arr
 $router->post('/api/v1/projects/{id}/furniture', static function (Request $request, array $p) {
     Auth::requirePermission('furniture.create');
     $roomInput = $request->input('room_id');
-    Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
-        'template_code' => (string) $request->input('template_code'),
-        'project_id' => (int) $p['id'],
-        'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
-        'name' => $request->input('name'),
-        'code' => $request->input('code'),
-        'category' => $request->input('category'),
-        'type' => $request->input('type'),
-        'quantity' => $request->input('quantity') ?? 1,
-        'parameters' => $request->input('parameters') ?? [],
-        'position' => $request->input('position') ?? [],
-        'material_id' => $request->input('material_id'),
-        'exterior_finish_id' => $request->input('exterior_finish_id'),
-        'interior_finish_id' => $request->input('interior_finish_id'),
-        'specification' => $request->input('specification') ?? [],
-    ]), 201);
+    try {
+        Response::json((new FurnitureEngine())->createInstance(Auth::requireTenant(), [
+            'template_code' => (string) $request->input('template_code'),
+            'project_id' => (int) $p['id'],
+            'room_id' => $roomInput === null || $roomInput === '' ? null : (int) $roomInput,
+            'name' => $request->input('name'),
+            'code' => $request->input('code'),
+            'category' => $request->input('category'),
+            'type' => $request->input('type'),
+            'quantity' => $request->input('quantity') ?? 1,
+            'parameters' => $request->input('parameters') ?? [],
+            'position' => $request->input('position') ?? [],
+            'material_id' => $request->input('material_id'),
+            'exterior_finish_id' => $request->input('exterior_finish_id'),
+            'interior_finish_id' => $request->input('interior_finish_id'),
+            'specification' => $request->input('specification') ?? [],
+        ]), 201);
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
 });
 
 $router->get('/api/v1/furniture/instances/{id}', static function (Request $r, array $p) {
@@ -185,6 +193,7 @@ $router->put('/api/v1/furniture/instances/{id}/customize', static function (Requ
         }
         $parameters = $request->input('parameters');
         $layout = $request->input('layout');
+        $expo = $request->input('expo');
         $merged = is_array($parameters) ? $parameters : [];
         if (is_array($layout)) {
             $merged['layout'] = $layout;
@@ -202,10 +211,20 @@ $router->put('/api/v1/furniture/instances/{id}/customize', static function (Requ
                 ]);
                 $merged['door_type'] = $merged['layout']['door_type'] ?? ($merged['door_type'] ?? 'HINGED');
             }
+            // Preserve existing expo if customize also updates parameters without expo key
+            if (!isset($merged['expo'])) {
+                $existing = $engine->get($tenantId, $id);
+                if (!empty($existing['parameters']['expo']) && is_array($existing['parameters']['expo'])) {
+                    $merged['expo'] = $existing['parameters']['expo'];
+                }
+            }
             $engine->updateParameters($tenantId, $id, $merged);
         }
+        if (is_array($expo)) {
+            $engine->updateExpo($tenantId, $id, $expo);
+        }
         $specPayload = [];
-        foreach (['exterior_finish_id', 'interior_finish_id', 'specification'] as $key) {
+        foreach (['exterior_finish_id', 'interior_finish_id', 'material_id', 'specification'] as $key) {
             if (array_key_exists($key, $request->body)) {
                 $specPayload[$key] = $request->body[$key];
             }

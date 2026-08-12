@@ -71,6 +71,8 @@ final class CatalogService
     {
         $defaults = [
             ['BRD-18-MDF', '18mm MDF Board', 'BOARD', 18, 2440, 1220, 45, 65],
+            ['BRD-06-MDF', '6mm MDF Board', 'BOARD', 6, 2440, 1220, 28, 40],
+            ['BRD-12-MDF', '12mm MDF Board', 'BOARD', 12, 2440, 1220, 36, 52],
             ['LAM-WH-01', 'White Laminate', 'LAMINATE', 1, 2440, 1220, 12, 22],
             ['EDGE-22-WH', 'White Edge Band 22mm', 'EDGE_BAND', 0.8, null, 22, 2.5, 4],
             ['HW-HINGE-01', 'Concealed Hinge', 'HARDWARE', null, null, null, 35, 55],

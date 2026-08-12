@@ -28,7 +28,7 @@ final class ExportService
             throw new \RuntimeException('package_ids required');
         }
         $mfg = new ManufacturingService();
-        $cols = ['SL', 'FURNITURE_CODE', 'FURNITURE_NAME', 'DESCRIPTION', 'FINISH_L', 'FINISH_W', 'CUT_L', 'CUT_W', 'THICKNESS', 'QTY', 'MATERIAL', 'COLOUR', 'E1', 'E2', 'E3', 'E4', 'NOTE'];
+        $cols = ['SL', 'FURNITURE_CODE', 'FURNITURE_NAME', 'DESCRIPTION', 'FINISH_L', 'FINISH_W', 'CUT_L', 'CUT_W', 'THICKNESS', 'QTY', 'MATERIAL', 'COLOUR', 'E1', 'E2', 'E3', 'E4', 'NOTE', 'EXPO', 'FACE_EXT', 'FACE_INT'];
         $lines = [implode(',', $cols)];
         $sl = 0;
         $codes = [];
@@ -57,6 +57,9 @@ final class ExportService
                     $row['edge_3'] ?? '',
                     $row['edge_4'] ?? '',
                     $this->csv(TextNormalizer::ascii((string) ($row['note'] ?? ''))),
+                    !empty($row['expo']) ? 'YES' : 'NO',
+                    $this->csv(TextNormalizer::ascii((string) ($row['face_exterior_finish'] ?? ''))),
+                    $this->csv(TextNormalizer::ascii((string) ($row['face_interior_finish'] ?? ''))),
                 ]);
             }
             foreach ($cut['hardware'] ?? [] as $row) {
@@ -79,6 +82,9 @@ final class ExportService
                     '',
                     '',
                     $this->csv(TextNormalizer::ascii((string) ($row['note'] ?? 'hardware'))),
+                    'NO',
+                    '',
+                    '',
                 ]);
             }
         }

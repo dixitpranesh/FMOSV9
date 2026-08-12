@@ -69,12 +69,18 @@ final class FurnitureEngine
         $values = $data['parameters'] ?? [];
         $values = $this->applyParameterDefaults($defs, $values);
         $this->validateParameters($defs, $values);
+        $this->validateBackBoard($tenantId, $values);
+        $materialId = $this->normalizeCatalogBoardId($tenantId, $data['material_id'] ?? null);
 
         $roomId = array_key_exists('room_id', $data) && $data['room_id'] !== null && $data['room_id'] !== ''
             ? (int) $data['room_id']
             : null;
 
-        $components = $this->generateComponents($template['code'], $values, $tenantId);
+        $extFinish = isset($data['exterior_finish_id']) && $data['exterior_finish_id'] !== '' && $data['exterior_finish_id'] !== null
+            ? (int) $data['exterior_finish_id'] : null;
+        $intFinish = isset($data['interior_finish_id']) && $data['interior_finish_id'] !== '' && $data['interior_finish_id'] !== null
+            ? (int) $data['interior_finish_id'] : null;
+        $components = $this->generateComponents($template['code'], $values, $tenantId, $extFinish, $intFinish);
         $quantity = max(1, (int) ($data['quantity'] ?? 1));
         $category = $data['category'] ?? $template['category'];
         $type = $data['type'] ?? $template['code'];
@@ -103,7 +109,7 @@ final class FurnitureEngine
             json_encode($values),
             json_encode($data['position'] ?? ['x' => 0, 'y' => 0, 'z' => 0, 'rotation' => 0]),
             json_encode($components),
-            $data['material_id'] ?? null,
+            $materialId,
             $data['exterior_finish_id'] ?? null,
             $data['interior_finish_id'] ?? null,
             json_encode($data['specification'] ?? new \stdClass()),
@@ -133,7 +139,10 @@ final class FurnitureEngine
         $values = array_merge($instance['parameters'], $parameters);
         $values = $this->applyParameterDefaults($defs, $values);
         $this->validateParameters($defs, $values);
-        $components = $this->generateComponents($template['code'], $values, $tenantId);
+        $this->validateBackBoard($tenantId, $values);
+        $extFinish = $instance['exterior_finish_id'] !== null ? (int) $instance['exterior_finish_id'] : null;
+        $intFinish = $instance['interior_finish_id'] !== null ? (int) $instance['interior_finish_id'] : null;
+        $components = $this->generateComponents($template['code'], $values, $tenantId, $extFinish, $intFinish);
         $stmt = $pdo->prepare("UPDATE furniture_instances SET parameter_values_json=?, components_json=?, width_mm=?, height_mm=?, depth_mm=?, revision=revision+1, stale_flags_json=?, updated_at=NOW() WHERE id=? AND tenant_id=?");
         $stmt->execute([
             json_encode($values),
@@ -173,7 +182,11 @@ final class FurnitureEngine
         foreach (['exterior_finish_id', 'interior_finish_id', 'material_id'] as $col) {
             if (array_key_exists($col, $data)) {
                 $fields[] = "{$col} = ?";
-                $params[] = $data[$col] !== null && $data[$col] !== '' ? (int) $data[$col] : null;
+                if ($col === 'material_id') {
+                    $params[] = $this->normalizeCatalogBoardId($tenantId, $data[$col]);
+                } else {
+                    $params[] = $data[$col] !== null && $data[$col] !== '' ? (int) $data[$col] : null;
+                }
             }
         }
         if (array_key_exists('specification', $data)) {
@@ -189,6 +202,10 @@ final class FurnitureEngine
         $pdo->prepare('UPDATE furniture_instances SET ' . implode(', ', $fields) . ' WHERE id = ? AND tenant_id = ?')
             ->execute($params);
         Audit::record('UPDATE', 'furniture_instance_meta', $id, $instance, $data);
+        // Re-stamp face finishes when laminate IDs change.
+        if (array_key_exists('exterior_finish_id', $data) || array_key_exists('interior_finish_id', $data)) {
+            return $this->updateParameters($tenantId, $id, $instance['parameters'] ?? []);
+        }
         return $this->get($tenantId, $id);
     }
 
@@ -211,6 +228,10 @@ final class FurnitureEngine
         }
         $hydrated = $this->hydrate($row);
         $hydrated['component_rows'] = $this->listComponentRows($tenantId, $id);
+        $expoMap = FurnitureExpo::fromParameters(is_array($hydrated['parameters'] ?? null) ? $hydrated['parameters'] : []);
+        $hydrated['expo'] = $expoMap;
+        $hydrated['expo_options'] = FurnitureExpo::optionsForComponents($hydrated['component_rows'], $expoMap);
+        $hydrated['material'] = $this->resolveCatalogBoard($tenantId, $hydrated['material_id'] !== null ? (int) $hydrated['material_id'] : null);
         return $hydrated;
     }
 
@@ -244,14 +265,52 @@ final class FurnitureEngine
     }
 
     /** @return list<array<string,mixed>> */
-    public function generateComponents(string $code, array $p, ?int $tenantId = null): array
+    public function generateComponents(string $code, array $p, ?int $tenantId = null, ?int $exteriorFinishId = null, ?int $interiorFinishId = null): array
     {
         if (empty($p['product_label'])) {
             $p['product_label'] = (new FurnitureLayoutEngine())->productLabel($code, $p);
         }
         $logical = (new FurnitureLayoutEngine())->generate($code, $p);
+        $expoMap = FurnitureExpo::fromParameters($p);
+        $backMaterialId = isset($p['back_material_id']) && $p['back_material_id'] !== '' && $p['back_material_id'] !== null
+            ? (int) $p['back_material_id']
+            : null;
+        foreach ($logical as &$c) {
+            $role = strtoupper((string) ($c['role'] ?? ''));
+            if ($role === '') {
+                continue;
+            }
+            $faces = PanelFinishResolver::resolve($role, $expoMap, $exteriorFinishId, $interiorFinishId);
+            $c['expo'] = $faces['expo'];
+            $c['faces'] = $faces;
+            if ($role === 'BACK_PANEL' && $backMaterialId) {
+                $c['back_material_id'] = $backMaterialId;
+            }
+        }
+        unset($c);
         $sheet = $this->resolveDefaultSheet($tenantId);
         return $this->normalizeToSheet($logical, (float) $sheet['length_mm'], (float) $sheet['width_mm']);
+    }
+
+    /**
+     * Update EXPO flags by component role. Merges into parameters.expo and regenerates components.
+     *
+     * @param array<string,bool> $expoByRole
+     */
+    public function updateExpo(int $tenantId, int $id, array $expoByRole): array
+    {
+        $instance = $this->get($tenantId, $id);
+        $params = $instance['parameters'] ?? [];
+        $current = FurnitureExpo::fromParameters($params);
+        foreach ($expoByRole as $role => $flag) {
+            $role = strtoupper((string) $role);
+            if (!isset(FurnitureExpo::ROLES[$role])) {
+                throw new \InvalidArgumentException("Invalid EXPO role: {$role}");
+            }
+            $current[$role] = (bool) $flag;
+        }
+        $params['expo'] = $current;
+        return $this->updateParameters($tenantId, $id, $params);
     }
 
     /**
@@ -283,7 +342,7 @@ final class FurnitureEngine
                 continue;
             }
             $type = $def['type'] ?? 'number';
-            if ($type === 'layout' || $type === 'object' || is_array($values[$key])) {
+            if ($type === 'layout' || $type === 'object' || $type === 'catalog_board' || is_array($values[$key])) {
                 continue;
             }
             if ($type === 'enum') {
@@ -309,6 +368,75 @@ final class FurnitureEngine
                     "Invalid parameter {$key}: {$num} exceeds maximum {$def['max']}"
                 );
             }
+        }
+    }
+
+    /**
+     * Furniture-level material_id refers to catalog_products BOARD (not laminate materials).
+     *
+     * @return int|null
+     */
+    private function normalizeCatalogBoardId(int $tenantId, mixed $raw): ?int
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (!is_numeric($raw)) {
+            throw new \InvalidArgumentException('Invalid material_id');
+        }
+        $id = (int) $raw;
+        $board = $this->resolveCatalogBoard($tenantId, $id);
+        if ($board === null) {
+            throw new \InvalidArgumentException('Material Type must be a published BOARD catalog product');
+        }
+        return $id;
+    }
+
+    /** @return array<string,mixed>|null */
+    private function resolveCatalogBoard(int $tenantId, ?int $id): ?array
+    {
+        if ($id === null || $id <= 0) {
+            return null;
+        }
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("SELECT id, sku, name, category, thickness_mm, length_mm, width_mm, publish_status, availability_status
+            FROM catalog_products
+            WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $stmt->execute([$id, $tenantId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+        if (strtoupper((string) $row['category']) !== 'BOARD') {
+            return null;
+        }
+        if (strtoupper((string) ($row['publish_status'] ?? '')) !== 'PUBLISHED') {
+            return null;
+        }
+        return $row;
+    }
+
+    /**
+     * @param array<string,mixed> $values
+     */
+    private function validateBackBoard(int $tenantId, array $values): void
+    {
+        if (!array_key_exists('back_material_id', $values) || $values['back_material_id'] === null || $values['back_material_id'] === '') {
+            return;
+        }
+        if (!is_numeric($values['back_material_id'])) {
+            throw new \InvalidArgumentException('Invalid back_material_id');
+        }
+        $id = (int) $values['back_material_id'];
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("SELECT id, category, thickness_mm FROM catalog_products WHERE id=? AND tenant_id=? AND deleted_at IS NULL AND publish_status='PUBLISHED'");
+        $stmt->execute([$id, $tenantId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new \InvalidArgumentException('Back panel material not found in catalog');
+        }
+        if (strtoupper((string) $row['category']) !== 'BOARD') {
+            throw new \InvalidArgumentException('Back panel material must be a BOARD catalog product');
         }
     }
 
@@ -341,6 +469,15 @@ final class FurnitureEngine
                 }
                 if (isset($c['group'])) {
                     $part['group'] = $c['group'];
+                }
+                if (array_key_exists('expo', $c)) {
+                    $part['expo'] = (bool) $c['expo'];
+                }
+                if (isset($c['faces']) && is_array($c['faces'])) {
+                    $part['faces'] = $c['faces'];
+                }
+                if (isset($c['back_material_id'])) {
+                    $part['back_material_id'] = (int) $c['back_material_id'];
                 }
                 $out[] = $part;
             }
@@ -459,7 +596,9 @@ final class FurnitureEngine
         if (!$template) {
             throw new \RuntimeException('Template not found');
         }
-        $components = $this->generateComponents($template['code'], $instance['parameters'], $tenantId);
+        $extFinish = $instance['exterior_finish_id'] !== null ? (int) $instance['exterior_finish_id'] : null;
+        $intFinish = $instance['interior_finish_id'] !== null ? (int) $instance['interior_finish_id'] : null;
+        $components = $this->generateComponents($template['code'], $instance['parameters'], $tenantId, $extFinish, $intFinish);
         $stmt = $pdo->prepare('UPDATE furniture_instances SET components_json = ?, width_mm=?, height_mm=?, depth_mm=?, updated_at = NOW() WHERE id = ? AND tenant_id = ?');
         $stmt->execute([
             json_encode($components),
@@ -573,14 +712,51 @@ final class FurnitureEngine
             geometry_json=VALUES(geometry_json), manufacturing_data_json=VALUES(manufacturing_data_json),
             status=VALUES(status), deleted_at=NULL, updated_at=NOW()');
 
+        $expoMap = null;
+        $paramStmt = $pdo->prepare('SELECT parameter_values_json FROM furniture_instances WHERE id=? AND tenant_id=?');
         foreach ($components as $idx => $c) {
             $key = sprintf('c%02d-%s', $idx + 1, preg_replace('/[^a-zA-Z0-9]+/', '-', strtolower((string) $c['name'])));
+            $role = strtoupper((string) ($c['role'] ?? FurnitureExpo::inferRoleFromName((string) ($c['name'] ?? ''))));
             $mfg = [];
             if (isset($c['split_from'])) {
                 $mfg['split_from'] = $c['split_from'];
             }
             if (isset($c['note'])) {
                 $mfg['note'] = $c['note'];
+            }
+            if ($role !== '') {
+                $mfg['role'] = $role;
+            }
+            if (array_key_exists('expo', $c)) {
+                $mfg['expo'] = (bool) $c['expo'];
+            } elseif ($role !== '') {
+                if ($expoMap === null) {
+                    $paramStmt->execute([$furnitureId, $tenantId]);
+                    $expoMap = FurnitureExpo::fromParameters(
+                        json_decode((string) ($paramStmt->fetchColumn() ?: '{}'), true) ?: []
+                    );
+                }
+                $mfg['expo'] = FurnitureExpo::isExpo($role, $expoMap);
+            }
+            if (isset($c['group'])) {
+                $mfg['group'] = $c['group'];
+            }
+            $geometry = ['source' => 'generator_v1'];
+            if ($role !== '') {
+                $geometry['role'] = $role;
+            }
+            if (isset($c['group'])) {
+                $geometry['group'] = $c['group'];
+            }
+            if (array_key_exists('expo', $mfg)) {
+                $geometry['expo'] = (bool) $mfg['expo'];
+            }
+            if (isset($c['faces']) && is_array($c['faces'])) {
+                $mfg['faces'] = $c['faces'];
+                $geometry['faces'] = $c['faces'];
+            }
+            if ($role === 'BACK_PANEL' && !empty($c['back_material_id'])) {
+                $mfg['back_material_id'] = (int) $c['back_material_id'];
             }
             $insert->execute([
                 $tenantId,
@@ -593,7 +769,7 @@ final class FurnitureEngine
                 (float) ($c['length_mm'] ?? 0),
                 (float) ($c['width_mm'] ?? 0),
                 (float) ($c['thickness_mm'] ?? 0),
-                json_encode(['source' => 'generator_v1']),
+                json_encode($geometry),
                 $mfg === [] ? null : json_encode($mfg),
                 'ACTIVE',
             ]);

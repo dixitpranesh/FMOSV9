@@ -295,19 +295,36 @@ export async function mountFurniture(main) {
     main.innerHTML = `<div class="panel"><p class="muted">Select a project first.</p></div>`;
     return;
   }
-  const [project, laminatesRes, templatesRes] = await Promise.all([
+  const [project, laminatesRes, templatesRes, catalogRes] = await Promise.all([
     api.get(`/api/v1/projects/${projectId}`),
     api.get('/api/v1/materials?category=LAMINATE'),
     api.get('/api/v1/furniture/templates'),
+    api.get('/api/v1/catalog/products').catch(() => ({ data: [] })),
   ]);
   const mode = project.data.model_mode || 'FURNITURE_FIRST';
   const room = project.data.buildings?.[0]?.floors?.[0]?.rooms?.[0] || null;
   const laminates = laminatesRes.data || [];
   const templates = templatesRes.data || [];
+  const boards = (catalogRes.data || []).filter((p) => String(p.category || '').toUpperCase() === 'BOARD'
+    && String(p.publish_status || '').toUpperCase() === 'PUBLISHED');
+  window.__fmosBoards = boards;
   const byId = Object.fromEntries(laminates.map((m) => [String(m.id), m]));
   const templatesByCode = Object.fromEntries(templates.map((t) => [t.code, t]));
   let exteriorSelect = null;
   let interiorSelect = null;
+
+  const boardOptionsHtml = (selectedId = '', includeEmpty = true, emptyLabel = '— optional —') => {
+    const opts = includeEmpty ? [`<option value="">${emptyLabel}</option>`] : [];
+    boards.forEach((b) => {
+      const sel = String(selectedId) === String(b.id) ? 'selected' : '';
+      opts.push(`<option value="${b.id}" ${sel}>${b.name}${b.thickness_mm != null ? ` (${b.thickness_mm} mm)` : ''}</option>`);
+    });
+    return opts.join('');
+  };
+  const defaultBoardId = () => {
+    const b18 = boards.find((b) => Number(b.thickness_mm) === 18);
+    return b18?.id || boards[0]?.id || '';
+  };
 
   main.innerHTML = `<div class="panel">
     <h2>Furniture <span class="muted" style="font-size:.85rem">(${mode})</span></h2>
@@ -320,6 +337,11 @@ export async function mountFurniture(main) {
       <label>Width <input id="furn-width" type="number" placeholder="from template" style="width:5rem"></label>
       <label>Height <input id="furn-height" type="number" placeholder="from template" style="width:5rem"></label>
       <label>Depth <input id="furn-depth" type="number" placeholder="from template" style="width:5rem"></label>
+      <label>Material Type
+        <select id="furn-material" style="min-width:12rem">
+          <option value="">— optional —</option>
+        </select>
+      </label>
       <span class="muted" style="font-size:.75rem">Leave blank to use each template’s defaults</span>
     </div>
     <div id="furn-list"></div>
@@ -368,6 +390,11 @@ export async function mountFurniture(main) {
       <div class="cust-pane" id="pane-finishes" style="display:none">
         <div class="grid grid-2">
           <div>
+            <label>Material Type (board)</label>
+            <select id="spec-material"></select>
+            <p class="muted" style="font-size:.75rem;margin:.25rem 0 0">Default board for this unit (carcass panels). Separate from laminate finishes.</p>
+          </div>
+          <div>
             <label>Exterior laminate</label>
             <div id="spec-exterior" class="finish-select-host"></div>
           </div>
@@ -380,10 +407,26 @@ export async function mountFurniture(main) {
             <input id="spec-notes" placeholder="optional manufacturing/design notes" />
           </div>
         </div>
+        <div class="expo-block" style="margin-top:1rem">
+          <div class="expo-head">
+            <strong>Exposed components (EXPO)</strong>
+            <span class="muted" title="Mark components that will remain visible after installation. EXPO components may require decorative finishing and special edge treatment.">Mark sides/parts visible to the client</span>
+          </div>
+          <p class="muted" style="font-size:.8rem;margin:.35rem 0 .6rem">EXPO ≠ doors only — doors default to exposed; you can also mark left/right sides, top, back, shelves, etc.</p>
+          <div id="expo-options" class="expo-options"></div>
+          <p id="expo-msg" class="muted"></p>
+        </div>
         <p id="spec-msg" class="muted"></p>
       </div>
 
       <div class="cust-pane" id="pane-components" style="display:none">
+        <div class="expo-block" style="margin-bottom:1rem">
+          <div class="expo-head">
+            <strong>Exposed components (EXPO)</strong>
+            <span class="muted">Visible after installation</span>
+          </div>
+          <div id="expo-options-comp" class="expo-options"></div>
+        </div>
         <div id="comp-list"></div>
       </div>
 
@@ -429,6 +472,15 @@ export async function mountFurniture(main) {
       <span class="muted" style="font-size:.75rem">Click to add · customize anytime</span>
     </button>`).join('');
 
+  const furnMaterialEl = document.getElementById('furn-material');
+  if (furnMaterialEl) {
+    furnMaterialEl.innerHTML = boardOptionsHtml(defaultBoardId(), true, '— optional —');
+  }
+  const specMaterialEl = document.getElementById('spec-material');
+  if (specMaterialEl) {
+    specMaterialEl.innerHTML = boardOptionsHtml('', true, '— none (generic Board) —');
+  }
+
   exteriorSelect = mountFinishSelect(document.getElementById('spec-exterior'), {
     laminates,
     emptyLabel: '— none —',
@@ -460,16 +512,25 @@ export async function mountFurniture(main) {
     const skip = new Set(['layout']);
     const fields = Object.entries(schema).filter(([k]) => !skip.has(k));
     document.getElementById('param-fields').innerHTML = fields.map(([key, def]) => {
-      const label = key.replace(/_/g, ' ');
+      const label = def.label || key.replace(/_/g, ' ');
       const val = values[key] ?? def.default ?? '';
       if ((def.type || '') === 'enum') {
         const opts = (def.options || []).map((o) => `<option value="${o}" ${String(val) === String(o) ? 'selected' : ''}>${o}</option>`).join('');
         return `<div><label>${label}</label><select data-param="${key}" class="schema-param">${opts}</select></div>`;
       }
+      if ((def.type || '') === 'catalog_board') {
+        const boards = (window.__fmosBoards || []);
+        const opts = [`<option value="">— default board —</option>`]
+          .concat(boards.map((b) => `<option value="${b.id}" ${String(val) === String(b.id) ? 'selected' : ''}>${b.name} (${b.thickness_mm || '?'} mm)</option>`))
+          .join('');
+        return `<div><label>${label}</label><select data-param="${key}" class="schema-param">${opts}</select>
+          <p class="muted" style="font-size:.75rem;margin:.2rem 0 0">Board for the back panel (optional)</p></div>`;
+      }
       const min = def.min ?? '';
       const max = def.max ?? '';
       const unit = def.unit ? ` (${def.unit})` : '';
-      const hint = (min !== '' || max !== '') ? ` <span class="muted" style="font-weight:400">${min}–${max}</span>` : '';
+      const rec = def.recommended != null ? ` · recommended ${def.recommended}` : '';
+      const hint = (min !== '' || max !== '') ? ` <span class="muted" style="font-weight:400">${min}–${max}${rec}</span>` : '';
       return `<div><label>${label}${unit}${hint}</label><input data-param="${key}" class="schema-param" type="number" min="${min}" max="${max}" value="${val}"></div>`;
     }).join('') + `
       <div><label>Name</label><input id="cust-name" value="${furniture.name || ''}"></div>
@@ -575,6 +636,68 @@ export async function mountFurniture(main) {
     });
   };
 
+  const renderExpoOptions = (furniture) => {
+    const options = furniture?.expo_options || [];
+    const html = options.length
+      ? options.map((o) => `
+          <label class="expo-check" title="${o.role}">
+            <input type="checkbox" class="expo-role" data-role="${o.role}" ${o.expo ? 'checked' : ''}>
+            <span>${o.label}${o.count > 1 ? ` (${o.count})` : ''}</span>
+            ${o.expo ? '<em class="expo-badge">EXPO</em>' : ''}
+          </label>`).join('')
+      : '<p class="muted">No eligible components yet.</p>';
+    const a = document.getElementById('expo-options');
+    const b = document.getElementById('expo-options-comp');
+    if (a) a.innerHTML = html;
+    if (b) b.innerHTML = html;
+  };
+
+  const collectExpo = () => {
+    const expo = {};
+    document.querySelectorAll('#expo-options .expo-role, #expo-options-comp .expo-role').forEach((el) => {
+      // Prefer finishes pane if both exist; last write wins — keep consistent by reading one host
+    });
+    const host = document.getElementById('expo-options');
+    (host ? host.querySelectorAll('.expo-role') : []).forEach((el) => {
+      expo[el.dataset.role] = !!el.checked;
+    });
+    return expo;
+  };
+
+  const bindExpoSync = () => {
+    const sync = (sourceId, targetId) => {
+      const src = document.getElementById(sourceId);
+      const dst = document.getElementById(targetId);
+      if (!src || !dst) return;
+      src.querySelectorAll('.expo-role').forEach((el) => {
+        el.onchange = () => {
+          const other = dst.querySelector(`.expo-role[data-role="${el.dataset.role}"]`);
+          if (other) other.checked = el.checked;
+          const badgeHost = el.closest('.expo-check');
+          if (badgeHost) {
+            const existing = badgeHost.querySelector('.expo-badge');
+            if (el.checked && !existing) {
+              badgeHost.insertAdjacentHTML('beforeend', '<em class="expo-badge">EXPO</em>');
+            } else if (!el.checked && existing) {
+              existing.remove();
+            }
+          }
+          const otherHost = other?.closest('.expo-check');
+          if (otherHost) {
+            const existing = otherHost.querySelector('.expo-badge');
+            if (el.checked && !existing) {
+              otherHost.insertAdjacentHTML('beforeend', '<em class="expo-badge">EXPO</em>');
+            } else if (!el.checked && existing) {
+              existing.remove();
+            }
+          }
+        };
+      });
+    };
+    sync('expo-options', 'expo-options-comp');
+    sync('expo-options-comp', 'expo-options');
+  };
+
   const renderComponents = async (furnitureId) => {
     const res = await api.get(`/api/v1/furniture/instances/${furnitureId}/components`);
     const rows = (res.data || []).map((c) => {
@@ -582,8 +705,10 @@ export async function mountFurniture(main) {
       const finishCell = m
         ? `<span class="finish-inline">${finishThumb(m, 'finish-swatch')}<span>${m.sku}</span></span>`
         : '<span class="muted">—</span>';
+      const role = c.geometry?.role || c.manufacturing_data?.role || '';
+      const expo = !!(c.geometry?.expo ?? c.manufacturing_data?.expo);
       return `<tr>
-        <td>${c.component_key}</td><td>${c.name}</td><td>${c.component_type}</td>
+        <td>${c.component_key}</td><td>${c.name}${expo ? ' <em class="expo-badge">EXPO</em>' : ''}</td><td>${c.component_type}${role ? ` <span class="muted">(${role})</span>` : ''}</td>
         <td>${c.length_mm}×${c.width_mm}×${c.thickness_mm}</td><td>${c.quantity}</td><td>${finishCell}</td>
         <td><div class="comp-finish" data-cid="${c.id}"></div></td>
       </tr>`;
@@ -621,9 +746,19 @@ export async function mountFurniture(main) {
     const ox = 50; const oy = 40;
     const mapX = (x) => ox + x * scale;
     const mapY = (y) => oy + y * scale;
-    const colors = { bay: '#dfe9f2', hanging: '#e8f5e9', shelves: '#fff8e1', drawers: '#fce4ec', open: '#f3f5f7', loft: '#e3f2fd', plinth: '#eceff1' };
+    const colors = { bay: '#dfe9f2', hanging: '#e8f5e9', shelves: '#fff8e1', drawers: '#fce4ec', open: '#f3f5f7', loft: '#e3f2fd', plinth: '#eceff1', expo: 'rgba(30, 136, 229, 0.22)' };
     d.elements.forEach((el) => {
       if (el.type === 'rect') {
+        if (el.role === 'expo') {
+          ctx.fillStyle = colors.expo;
+          ctx.fillRect(mapX(el.x), mapY(el.y), el.w * scale, el.h * scale);
+          ctx.strokeStyle = '#1565c0';
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([5, 3]);
+          ctx.strokeRect(mapX(el.x), mapY(el.y), el.w * scale, el.h * scale);
+          ctx.setLineDash([]);
+          return;
+        }
         ctx.fillStyle = colors[el.role] || 'transparent';
         if (colors[el.role]) ctx.fillRect(mapX(el.x), mapY(el.y), el.w * scale, el.h * scale);
         ctx.strokeStyle = '#1c2430';
@@ -635,11 +770,22 @@ export async function mountFurniture(main) {
           ctx.fillText(el.label, mapX(el.x) + 4, mapY(el.y) + 14);
         }
       } else if (el.type === 'line') {
-        ctx.strokeStyle = '#666';
+        ctx.strokeStyle = el.expo ? '#1565c0' : '#666';
+        ctx.lineWidth = el.expo ? 2.5 : 1;
         ctx.beginPath();
         ctx.moveTo(mapX(el.x1), mapY(el.y1));
         ctx.lineTo(mapX(el.x2), mapY(el.y2));
         ctx.stroke();
+        ctx.lineWidth = 1;
+        if (el.expo) {
+          ctx.fillStyle = '#1565c0';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText('EXPO', mapX((el.x1 + el.x2) / 2) - 14, mapY(el.y1) - 3);
+        }
+      } else if (el.type === 'label') {
+        ctx.fillStyle = '#0d47a1';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(el.text || 'EXPO', mapX(el.x), mapY(el.y));
       }
     });
     ctx.fillStyle = '#c00';
@@ -812,32 +958,65 @@ export async function mountFurniture(main) {
 
     for (const mesh of model.data.meshes) {
       const fallback = mesh.color || (mesh.role === 'shutter' ? '#c9d6df' : '#e6ebf0');
-      const material = new THREE.MeshStandardMaterial({
-        color: fallback,
-        roughness: mesh.finish?.roughness ?? 0.7,
-        metalness: mesh.finish?.metalness ?? 0,
+      const makeMat = (fin, colorFallback) => new THREE.MeshStandardMaterial({
+        color: colorFallback || fallback,
+        roughness: fin?.roughness ?? 0.7,
+        metalness: fin?.metalness ?? 0,
       });
-      const box = new THREE.Mesh(new THREE.BoxGeometry(mesh.size[0], mesh.size[1], mesh.size[2]), material);
-      box.position.set(mesh.position[0], mesh.position[1], mesh.position[2]);
-      scene.add(box);
 
-      const url = mesh.finish?.texture_url;
-      if (url) {
+      let materials;
+      const ff = mesh.face_finishes;
+      if (ff && (ff.exterior || ff.interior) && ff.expo_face_index != null && mesh.expo) {
+        const intMat = makeMat(ff.interior, '#e6ebf0');
+        const extMat = makeMat(ff.exterior, '#c9d6df');
+        materials = [intMat, intMat, intMat, intMat, intMat, intMat];
+        materials[ff.expo_face_index] = extMat;
+      } else if (ff && !mesh.expo) {
+        const intMat = makeMat(ff.interior || ff.exterior, fallback);
+        materials = [intMat, intMat, intMat, intMat, intMat, intMat];
+      } else {
+        materials = makeMat(mesh.finish, fallback);
+      }
+
+      const box = new THREE.Mesh(new THREE.BoxGeometry(mesh.size[0], mesh.size[1], mesh.size[2]), materials);
+      box.position.set(mesh.position[0], mesh.position[1], mesh.position[2]);
+      box.userData.expo = !!mesh.expo;
+      box.userData.component_role = mesh.component_role || null;
+      scene.add(box);
+      if (mesh.expo && mesh.role !== 'shutter') {
+        const edges = new THREE.EdgesGeometry(box.geometry);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x1565c0 }));
+        line.position.copy(box.position);
+        scene.add(line);
+      }
+
+      const applyTex = async (mat, fin, size) => {
+        const url = fin?.texture_url;
+        if (!url || !mat) return;
         const tex = await getTex(url);
-        if (tex) {
-          const map = tex.clone();
-          map.needsUpdate = true;
-          map.wrapS = map.wrapT = THREE.RepeatWrapping;
-          map.repeat.set(
-            Math.max(0.5, mesh.size[0] / 500),
-            Math.max(0.5, mesh.size[1] / 500)
-          );
-          material.map = map;
-          material.color.set('#ffffff');
-          material.roughness = mesh.finish.roughness ?? 0.55;
-          material.metalness = mesh.finish.metalness ?? 0;
-          material.needsUpdate = true;
+        if (!tex) return;
+        const map = tex.clone();
+        map.needsUpdate = true;
+        map.wrapS = map.wrapT = THREE.RepeatWrapping;
+        map.repeat.set(
+          Math.max(0.5, size[0] / 500),
+          Math.max(0.5, size[1] / 500)
+        );
+        mat.map = map;
+        mat.color.set('#ffffff');
+        mat.roughness = fin.roughness ?? 0.55;
+        mat.metalness = fin.metalness ?? 0;
+        mat.needsUpdate = true;
+      };
+
+      if (Array.isArray(materials)) {
+        const extIdx = ff?.expo_face_index;
+        for (let i = 0; i < materials.length; i++) {
+          const fin = (mesh.expo && i === extIdx) ? (ff?.exterior || mesh.finish) : (ff?.interior || ff?.exterior || mesh.finish);
+          await applyTex(materials[i], fin, mesh.size);
         }
+      } else {
+        await applyTex(materials, mesh.finish, mesh.size);
       }
     }
 
@@ -940,7 +1119,14 @@ export async function mountFurniture(main) {
 
     exteriorSelect.setValue(f.exterior_finish_id || '');
     interiorSelect.setValue(f.interior_finish_id || '');
+    const sm = document.getElementById('spec-material');
+    if (sm) {
+      sm.innerHTML = boardOptionsHtml(f.material_id || '', true, '— none (generic Board) —');
+      sm.value = f.material_id ? String(f.material_id) : '';
+    }
     document.getElementById('spec-notes').value = f.specification?.notes || '';
+    renderExpoOptions(f);
+    bindExpoSync();
     await renderComponents(selectedId);
     showTab(activeTab || 'size');
     if (activeTab === 'views') {
@@ -954,8 +1140,11 @@ export async function mountFurniture(main) {
     const parameters = {};
     document.querySelectorAll('.schema-param').forEach((el) => {
       const key = el.dataset.param;
-      if (el.tagName === 'SELECT') parameters[key] = el.value;
-      else parameters[key] = el.value === '' ? null : Number(el.value);
+      if (el.tagName === 'SELECT') {
+        parameters[key] = el.value === '' ? null : (Number.isFinite(Number(el.value)) ? Number(el.value) : el.value);
+      } else {
+        parameters[key] = el.value === '' ? null : Number(el.value);
+      }
     });
     return parameters;
   };
@@ -972,6 +1161,10 @@ export async function mountFurniture(main) {
         quantity: Number(document.getElementById('cust-qty').value || 1),
         parameters,
         layout,
+        expo: collectExpo(),
+        material_id: document.getElementById('spec-material')?.value
+          ? Number(document.getElementById('spec-material').value)
+          : null,
         exterior_finish_id: exteriorSelect.getValue() ? Number(exteriorSelect.getValue()) : null,
         interior_finish_id: interiorSelect.getValue() ? Number(interiorSelect.getValue()) : null,
         specification: { notes: document.getElementById('spec-notes').value || '' },
@@ -979,6 +1172,8 @@ export async function mountFurniture(main) {
       document.getElementById('params-msg').textContent = 'All customizations saved.';
       document.getElementById('layout-msg').textContent = 'Internals regenerated.';
       document.getElementById('spec-msg').textContent = 'Finishes saved.';
+      const expoMsg = document.getElementById('expo-msg');
+      if (expoMsg) expoMsg.textContent = 'EXPO selection saved.';
       await refresh();
       await openCustomize(selectedId);
     } catch (err) {
@@ -1025,12 +1220,15 @@ export async function mountFurniture(main) {
         parameters: {
           width, height, depth,
           carcass_thickness: tpl.parameters.carcass_thickness?.default ?? 18,
-          back_thickness: tpl.parameters.back_thickness?.default ?? 6,
+          back_thickness: tpl.parameters.back_thickness?.default ?? 18,
+          back_material_id: tpl.parameters.back_material_id?.default ?? null,
           shutter_count: tpl.parameters.shutter_count?.default ?? 2,
           door_type: tpl.parameters.door_type?.default ?? 'HINGED',
           layout: clone(tpl.parameters.layout?.default || emptyLayout()),
         },
       };
+      const matRaw = document.getElementById('furn-material')?.value;
+      if (matRaw) payload.material_id = Number(matRaw);
       if (mode === 'LEGACY' && room) payload.room_id = room.id;
       try {
         const created = await api.post('/api/v1/furniture/instances', payload);

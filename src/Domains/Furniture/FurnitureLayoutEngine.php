@@ -19,7 +19,7 @@ final class FurnitureLayoutEngine
         $w = (float) $p['width'];
         $h = (float) $p['height'];
         $d = (float) $p['depth'];
-        $backT = (float) ($p['back_thickness'] ?? 6);
+        $backT = (float) ($p['back_thickness'] ?? 18);
         $layout = $this->normalizeLayout($p);
         $plinth = (float) ($layout['plinth_height_mm'] ?? 0);
         $partT = (float) ($layout['partition_thickness_mm'] ?? $t);
@@ -29,6 +29,9 @@ final class FurnitureLayoutEngine
         $mainH = max(1.0, $h - $plinth - $loftH);
         $internalW = max(1.0, $w - (2 * $t));
         $internalMainH = max(1.0, $mainH - (2 * $t));
+        // Usable internal depth: leave room for rear back panel (max with carcass setback).
+        // For legacy 6mm backs with 18mm carcass this equals d-t (unchanged cut sizes).
+        $internalDepth = max(1.0, $d - max($t, $backT));
         $unit = $this->productLabel($templateCode, $p);
 
         $logical = [];
@@ -45,10 +48,10 @@ final class FurnitureLayoutEngine
         }
 
         if ($loftH > 0) {
-            $logical[] = $this->panel($this->partName($unit, 'Loft Base Panel'), $internalW, max(1, $d - $t), $t, 1, 'loft', 'LOFT_BASE');
+            $logical[] = $this->panel($this->partName($unit, 'Loft Base Panel'), $internalW, $internalDepth, $t, 1, 'loft', 'LOFT_BASE');
             $loftShelves = (int) ($loft['shelf_count'] ?? 0);
             if ($loftShelves > 0) {
-                $logical[] = $this->panel($this->partName($unit, 'Loft Shelf'), $internalW, max(1, $d - $t), $t, $loftShelves, 'loft', 'LOFT_SHELF');
+                $logical[] = $this->panel($this->partName($unit, 'Loft Shelf'), $internalW, $internalDepth, $t, $loftShelves, 'loft', 'LOFT_SHELF');
             }
             $loftDoors = max(1, (int) ($p['shutter_count'] ?? count($layout['bays'])));
             $logical[] = $this->panel($this->partName($unit, 'Loft Shutter'), $loftH - $t, $internalW / $loftDoors, $t, $loftDoors, 'loft', 'LOFT_SHUTTER');
@@ -69,7 +72,7 @@ final class FurnitureLayoutEngine
             $logical[] = $this->panel(
                 $this->partName($unit, "Vertical Partition ({$left} / {$right})"),
                 $internalMainH,
-                $d - $t,
+                $internalDepth,
                 $partT,
                 1,
                 'partition',
@@ -91,7 +94,7 @@ final class FurnitureLayoutEngine
                         $logical[] = $this->panel(
                             $this->partName($unit, "{$secPrefix} - Shelf"),
                             max(1, $bayW - 2),
-                            max(1, $d - $t),
+                            $internalDepth,
                             $t,
                             $count,
                             'shelf',

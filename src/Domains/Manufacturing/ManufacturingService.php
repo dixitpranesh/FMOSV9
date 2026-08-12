@@ -7,8 +7,11 @@ namespace Fmos\Domains\Manufacturing;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Domains\Catalog\CatalogService;
 use Fmos\Domains\Catalog\MaterialService;
 use Fmos\Domains\Furniture\FurnitureEngine;
+use Fmos\Domains\Furniture\FurnitureExpo;
+use Fmos\Domains\Furniture\PanelFinishResolver;
 
 final class ManufacturingService
 {
@@ -33,7 +36,7 @@ final class ManufacturingService
             $type = is_array($def) ? ($def['type'] ?? 'number') : null;
 
             // Structured / non-numeric params are valid by design.
-            if ($type === 'layout' || $type === 'object' || is_array($v)) {
+            if ($type === 'layout' || $type === 'object' || $type === 'catalog_board' || is_array($v)) {
                 if ($k === 'layout' && (!is_array($v) || !isset($v['bays']) || !is_array($v['bays']))) {
                     $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => 'layout must include bays'];
                 }
@@ -230,21 +233,71 @@ final class ManufacturingService
             $e4 = $applyEdges ? (float) ($edges['edge_4'] ?? 0) : 0.0;
             [$cutL, $cutW] = $this->computeCutting($finL, $finW, $e1, $e2, $e3, $e4, $cuttingRule);
 
-            $compFinishId = $c['finish_id'] ?? $finishId;
-            $compFinishName = $finishName;
+            $publicId = sprintf('P-%d-%d-R%d-%d', $projectId, $furnitureId, $rev, $panelSeq);
+            $note = $c['manufacturing_data']['note'] ?? null;
+            $role = strtoupper((string) ($c['manufacturing_data']['role'] ?? $c['geometry']['role'] ?? ''));
+            $expoMap = FurnitureExpo::fromParameters(is_array($furniture['parameters'] ?? null) ? $furniture['parameters'] : []);
+            $faces = PanelFinishResolver::resolve(
+                $role !== '' ? $role : 'PANEL',
+                $expoMap,
+                $furniture['exterior_finish_id'] !== null ? (int) $furniture['exterior_finish_id'] : null,
+                $furniture['interior_finish_id'] !== null ? (int) $furniture['interior_finish_id'] : null
+            );
+            $isExpo = !empty($faces['expo']) || !empty($c['manufacturing_data']['expo']) || !empty($c['geometry']['expo']);
+            if ($role !== '' && !$isExpo) {
+                $isExpo = FurnitureExpo::isExpo($role, $expoMap);
+            }            if ($isExpo) {
+                $note = $note ? (rtrim((string) $note) . ' | EXPO') : 'EXPO';
+            }
+            $primaryFinishId = PanelFinishResolver::primaryFinishId($faces);
             if (!empty($c['finish_id'])) {
+                $primaryFinishId = (int) $c['finish_id'];
+            }
+            $compFinishId = $primaryFinishId ?: ($furniture['exterior_finish_id'] ?? null);
+            $compFinishName = $finishName;
+            if ($compFinishId) {
                 try {
-                    $compFinishName = $matSvc->get($tenantId, (int) $c['finish_id'])['sku'];
+                    $compFinishName = $matSvc->get($tenantId, (int) $compFinishId)['sku'];
                 } catch (\Throwable) {
                 }
             }
-
-            $publicId = sprintf('P-%d-%d-R%d-%d', $projectId, $furnitureId, $rev, $panelSeq);
-            $note = $c['manufacturing_data']['note'] ?? null;
+            $faceExtName = null;
+            $faceIntName = null;
+            if (!empty($faces['face_exterior']['finish_id'])) {
+                try {
+                    $faceExtName = $matSvc->get($tenantId, (int) $faces['face_exterior']['finish_id'])['sku'];
+                } catch (\Throwable) {
+                }
+            }
+            if (!empty($faces['face_interior']['finish_id'])) {
+                try {
+                    $faceIntName = $matSvc->get($tenantId, (int) $faces['face_interior']['finish_id'])['sku'];
+                } catch (\Throwable) {
+                }
+            }
+            $boardName = 'Board';
+            $boardCatalogId = null;
+            if ($role === 'BACK_PANEL' && !empty($furniture['parameters']['back_material_id'])) {
+                $boardCatalogId = (int) $furniture['parameters']['back_material_id'];
+            } elseif (!empty($furniture['material_id'])) {
+                $boardCatalogId = (int) $furniture['material_id'];
+            }
+            if ($boardCatalogId) {
+                try {
+                    $board = (new CatalogService())->get($tenantId, $boardCatalogId);
+                    if (strtoupper((string) ($board['category'] ?? '')) === 'BOARD') {
+                        $boardName = $board['name'] ?? $board['sku'] ?? 'Board';
+                    }
+                } catch (\Throwable) {
+                }
+            }
             $desc = $c['name'];
-            $furnitureCode = $furniture['code'] ?? null;
-            if ($furnitureCode && !str_contains((string) $desc, (string) $furnitureCode)) {
-                // Keep part name as primary description; code is available on package.
+            $edgeMeta = ['1' => $e1, '2' => $e2, '3' => $e3, '4' => $e4, 'expo' => $isExpo, 'faces' => $faces];
+            if ($faceExtName) {
+                $edgeMeta['face_exterior_finish'] = $faceExtName;
+            }
+            if ($faceIntName) {
+                $edgeMeta['face_interior_finish'] = $faceIntName;
             }
             $stmt = $pdo->prepare('INSERT INTO panels (
                 tenant_id, project_id, manufacturing_package_id, furniture_id, component_id, public_id, name, material_name, material_id, finish_id, finish_name,
@@ -252,11 +305,11 @@ final class ManufacturingService
                 quantity, grain_direction, edge_json, edge_1, edge_2, edge_3, edge_4, note, status, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
             $stmt->execute([
-                $tenantId, $projectId, $pkgId, $furnitureId, (int) $c['id'], $publicId, $desc, 'Board',
+                $tenantId, $projectId, $pkgId, $furnitureId, (int) $c['id'], $publicId, $desc, $boardName,
                 $compFinishId, $compFinishName,
                 $c['thickness_mm'], $cutL, $cutW, $finL, $finW, $cutL, $cutW,
                 $c['quantity'], 'LENGTH',
-                json_encode(['1' => $e1, '2' => $e2, '3' => $e3, '4' => $e4]),
+                json_encode($edgeMeta),
                 $e1, $e2, $e3, $e4, $note, 'CREATED',
             ]);
             $panelId = (int) $pdo->lastInsertId();
@@ -266,7 +319,7 @@ final class ManufacturingService
                 edge_1, edge_2, edge_3, edge_4, note, rotate_flag
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)');
             $stmt->execute([
-                $tenantId, $pkgId, $panelId, $desc, $cutL, $cutW, $c['thickness_mm'], $c['quantity'], 'Board',
+                $tenantId, $pkgId, $panelId, $desc, $cutL, $cutW, $c['thickness_mm'], $c['quantity'], $boardName,
                 $finL, $finW, $cutL, $cutW, $compFinishName, $compFinishName,
                 $e1, $e2, $e3, $e4, $note,
             ]);
@@ -383,6 +436,47 @@ final class ManufacturingService
         if ($scope === 'furniture' && $pkg['furniture_id']) {
             // already package-scoped to one furniture
         }
+        $expoByComponentId = [];
+        foreach (($furniture ?? [])['component_rows'] ?? [] as $c) {
+            $expoByComponentId[(int) $c['id']] = !empty($c['manufacturing_data']['expo']);
+        }
+        $pdo = Database::connection();
+        $panelExpo = $pdo->prepare('SELECT id, component_id, edge_json, note FROM panels WHERE manufacturing_package_id=?');
+        $panelExpo->execute([$packageId]);
+        $expoByPanelId = [];
+        foreach ($panelExpo->fetchAll() as $p) {
+            $fromEdge = json_decode((string) ($p['edge_json'] ?? ''), true);
+            if (is_array($fromEdge) && array_key_exists('expo', $fromEdge)) {
+                $expoByPanelId[(int) $p['id']] = (bool) $fromEdge['expo'];
+            } elseif (!empty($p['component_id']) && isset($expoByComponentId[(int) $p['component_id']])) {
+                $expoByPanelId[(int) $p['id']] = $expoByComponentId[(int) $p['component_id']];
+            } else {
+                $note = (string) ($p['note'] ?? '');
+                $expoByPanelId[(int) $p['id']] = str_contains($note, 'EXPO');
+            }
+        }
+        $items = array_map(static function (array $row) use ($expoByPanelId): array {
+            $pid = (int) ($row['panel_id'] ?? 0);
+            $row['expo'] = $expoByPanelId[$pid] ?? false;
+            return $row;
+        }, $items);
+        // Enrich face finish labels from panel edge_json
+        $panelFaces = $pdo->prepare('SELECT id, edge_json FROM panels WHERE manufacturing_package_id=?');
+        $panelFaces->execute([$packageId]);
+        $faceByPanel = [];
+        foreach ($panelFaces->fetchAll() as $p) {
+            $ej = json_decode((string) ($p['edge_json'] ?? ''), true) ?: [];
+            $faceByPanel[(int) $p['id']] = [
+                'face_exterior_finish' => $ej['face_exterior_finish'] ?? null,
+                'face_interior_finish' => $ej['face_interior_finish'] ?? null,
+            ];
+        }
+        $items = array_map(static function (array $row) use ($faceByPanel): array {
+            $pid = (int) ($row['panel_id'] ?? 0);
+            $row['face_exterior_finish'] = $faceByPanel[$pid]['face_exterior_finish'] ?? null;
+            $row['face_interior_finish'] = $faceByPanel[$pid]['face_interior_finish'] ?? null;
+            return $row;
+        }, $items);
         return [
             'package_id' => $packageId,
             'furniture_id' => $pkg['furniture_id'],
@@ -390,7 +484,7 @@ final class ManufacturingService
             'furniture_name' => $furniture['name'] ?? null,
             'items' => $items,
             'hardware' => $hardware,
-            'columns' => ['description', 'finishing_length_mm', 'finishing_width_mm', 'cutting_length_mm', 'cutting_width_mm', 'thickness_mm', 'quantity', 'material_name', 'colour', 'edge_1', 'edge_2', 'edge_3', 'edge_4', 'note'],
+            'columns' => ['description', 'finishing_length_mm', 'finishing_width_mm', 'cutting_length_mm', 'cutting_width_mm', 'thickness_mm', 'quantity', 'material_name', 'colour', 'edge_1', 'edge_2', 'edge_3', 'edge_4', 'note', 'expo', 'face_exterior_finish', 'face_interior_finish'],
         ];
     }
 
