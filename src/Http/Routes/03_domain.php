@@ -12,9 +12,12 @@ use Fmos\Domains\Catalog\CatalogService;
 use Fmos\Domains\Catalog\MaterialService;
 use Fmos\Domains\Export\ExportService;
 use Fmos\Domains\Furniture\FurnitureEngine;
+use Fmos\Domains\Furniture\FurnitureLayoutEngine;
 use Fmos\Domains\Furniture\FurnitureViewService;
 use Fmos\Domains\Manufacturing\ManufacturingService;
+use Fmos\Domains\Manufacturing\SheetPlanService;
 use Fmos\Domains\Pricing\CommercialService;
+use Fmos\Core\Database;
 
 $router->get('/api/v1/rooms/{id}/design', static function (Request $r, array $p) {
     Auth::requirePermission('design.view');
@@ -136,11 +139,15 @@ $router->get('/api/v1/furniture/instances/{id}', static function (Request $r, ar
 
 $router->put('/api/v1/furniture/instances/{id}/parameters', static function (Request $request, array $p) {
     Auth::requirePermission('furniture.update');
-    Response::json((new FurnitureEngine())->updateParameters(
-        Auth::requireTenant(),
-        (int) $p['id'],
-        (array) ($request->input('parameters') ?? [])
-    ));
+    try {
+        Response::json((new FurnitureEngine())->updateParameters(
+            Auth::requireTenant(),
+            (int) $p['id'],
+            (array) ($request->input('parameters') ?? [])
+        ));
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
 });
 
 $router->put('/api/v1/furniture/instances/{id}/layout', static function (Request $request, array $p) {
@@ -150,11 +157,66 @@ $router->put('/api/v1/furniture/instances/{id}/layout', static function (Request
         Response::error('VALIDATION', 'layout object required', 422);
         return;
     }
-    Response::json((new FurnitureEngine())->updateLayout(
-        Auth::requireTenant(),
-        (int) $p['id'],
-        $layout
-    ));
+    try {
+        Response::json((new FurnitureEngine())->updateLayout(
+            Auth::requireTenant(),
+            (int) $p['id'],
+            $layout
+        ));
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
+});
+
+$router->put('/api/v1/furniture/instances/{id}/customize', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $tenantId = Auth::requireTenant();
+    $id = (int) $p['id'];
+    $engine = new FurnitureEngine();
+    try {
+        if (array_key_exists('name', $request->body) || array_key_exists('code', $request->body) || array_key_exists('quantity', $request->body)) {
+            $meta = [];
+            foreach (['name', 'code', 'quantity'] as $key) {
+                if (array_key_exists($key, $request->body)) {
+                    $meta[$key] = $request->body[$key];
+                }
+            }
+            $engine->updateMeta($tenantId, $id, $meta);
+        }
+        $parameters = $request->input('parameters');
+        $layout = $request->input('layout');
+        $merged = is_array($parameters) ? $parameters : [];
+        if (is_array($layout)) {
+            $merged['layout'] = $layout;
+            if (isset($layout['door_type'])) {
+                $merged['door_type'] = $layout['door_type'];
+            }
+        }
+        if ($merged !== []) {
+            if (isset($merged['layout']) && is_array($merged['layout'])) {
+                $layoutEngine = new FurnitureLayoutEngine();
+                $merged['layout'] = $layoutEngine->normalizeLayout([
+                    'layout' => $merged['layout'],
+                    'carcass_thickness' => $merged['carcass_thickness'] ?? 18,
+                    'door_type' => $merged['door_type'] ?? ($merged['layout']['door_type'] ?? 'HINGED'),
+                ]);
+                $merged['door_type'] = $merged['layout']['door_type'] ?? ($merged['door_type'] ?? 'HINGED');
+            }
+            $engine->updateParameters($tenantId, $id, $merged);
+        }
+        $specPayload = [];
+        foreach (['exterior_finish_id', 'interior_finish_id', 'specification'] as $key) {
+            if (array_key_exists($key, $request->body)) {
+                $specPayload[$key] = $request->body[$key];
+            }
+        }
+        if ($specPayload !== []) {
+            $engine->updateMeta($tenantId, $id, $specPayload);
+        }
+        Response::json($engine->get($tenantId, $id));
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
 });
 
 $router->put('/api/v1/furniture/instances/{id}/specification', static function (Request $request, array $p) {
@@ -274,6 +336,21 @@ $router->post('/api/v1/manufacturing/{id}/cutlist/export', static function (Requ
     Response::json((new ExportService())->manufacturingPackageCsv(Auth::requireTenant(), (int) $p['id']));
 });
 
+$router->post('/api/v1/manufacturing/jobs/{id}/cutlist/export', static function (Request $r, array $p) {
+    Auth::requirePermission('manufacturing.view');
+    Response::json((new ExportService())->manufacturingJobCsv(Auth::requireTenant(), (int) $p['id']));
+});
+
+$router->post('/api/v1/manufacturing/cutlist/export', static function (Request $request) {
+    Auth::requirePermission('manufacturing.view');
+    $ids = $request->input('package_ids');
+    if (!is_array($ids) || $ids === []) {
+        Response::error('VALIDATION', 'package_ids required', 422);
+        return;
+    }
+    Response::json((new ExportService())->manufacturingPackagesCsv(Auth::requireTenant(), $ids));
+});
+
 $router->post('/api/v1/furniture/instances/{id}/export/design', static function (Request $request, array $p) {
     Auth::requirePermission('furniture.view');
     Response::json((new ExportService())->designHtml(
@@ -346,6 +423,36 @@ $router->post('/api/v1/manufacturing/{id}/release', static function (Request $r,
 $router->post('/api/v1/manufacturing/{id}/nest', static function (Request $r, array $p) {
     Auth::requirePermission('nesting.generate');
     Response::json((new ManufacturingService())->nest(Auth::requireTenant(), (int) $p['id']), 201);
+});
+
+$router->post('/api/v1/projects/{id}/nesting/sheet-plan', static function (Request $request, array $p) {
+    Auth::requirePermission('nesting.generate');
+    $packageIds = $request->input('package_ids');
+    if (!is_array($packageIds)) {
+        $packageIds = [];
+    }
+    $plan = (new SheetPlanService())->buildProjectPlan(
+        Auth::requireTenant(),
+        (int) $p['id'],
+        $packageIds
+    );
+    Response::json($plan, 201);
+});
+
+$router->post('/api/v1/projects/{id}/nesting/sheet-plan/pdf', static function (Request $request, array $p) {
+    Auth::requirePermission('nesting.view');
+    $tenantId = Auth::requireTenant();
+    $projectId = (int) $p['id'];
+    $packageIds = $request->input('package_ids');
+    if (!is_array($packageIds)) {
+        $packageIds = [];
+    }
+    $svc = new SheetPlanService();
+    $plan = $svc->buildProjectPlan($tenantId, $projectId, $packageIds);
+    $stmt = Database::connection()->prepare('SELECT name FROM projects WHERE id=? AND tenant_id=?');
+    $stmt->execute([$projectId, $tenantId]);
+    $projectName = (string) ($stmt->fetchColumn() ?: ('Project ' . $projectId));
+    Response::json($svc->renderPdf($plan, $projectName));
 });
 
 $router->get('/api/v1/manufacturing/{id}/labels', static function (Request $r, array $p) {

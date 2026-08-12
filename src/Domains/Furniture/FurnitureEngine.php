@@ -246,6 +246,9 @@ final class FurnitureEngine
     /** @return list<array<string,mixed>> */
     public function generateComponents(string $code, array $p, ?int $tenantId = null): array
     {
+        if (empty($p['product_label'])) {
+            $p['product_label'] = (new FurnitureLayoutEngine())->productLabel($code, $p);
+        }
         $logical = (new FurnitureLayoutEngine())->generate($code, $p);
         $sheet = $this->resolveDefaultSheet($tenantId);
         return $this->normalizeToSheet($logical, (float) $sheet['length_mm'], (float) $sheet['width_mm']);
@@ -286,15 +289,25 @@ final class FurnitureEngine
             if ($type === 'enum') {
                 $opts = $def['options'] ?? [];
                 if ($opts !== [] && !in_array($values[$key], $opts, true)) {
-                    throw new \RuntimeException("Invalid parameter {$key}");
+                    throw new \InvalidArgumentException(
+                        "Invalid parameter {$key}: must be one of " . implode(', ', $opts)
+                    );
                 }
                 continue;
             }
             if (!is_numeric($values[$key])) {
-                throw new \RuntimeException("Invalid parameter {$key}");
+                throw new \InvalidArgumentException("Invalid parameter {$key}: must be numeric");
             }
-            if (isset($def['min'], $def['max']) && ($values[$key] < $def['min'] || $values[$key] > $def['max'])) {
-                throw new \RuntimeException("Invalid parameter {$key}");
+            $num = (float) $values[$key];
+            if (isset($def['min']) && $num < (float) $def['min']) {
+                throw new \InvalidArgumentException(
+                    "Invalid parameter {$key}: {$num} is below minimum {$def['min']}"
+                );
+            }
+            if (isset($def['max']) && $num > (float) $def['max']) {
+                throw new \InvalidArgumentException(
+                    "Invalid parameter {$key}: {$num} exceeds maximum {$def['max']}"
+                );
             }
         }
     }
@@ -323,6 +336,12 @@ final class FurnitureEngine
                 (string) ($c['type'] ?? 'PANEL')
             );
             foreach ($parts as $part) {
+                if (isset($c['role'])) {
+                    $part['role'] = $c['role'];
+                }
+                if (isset($c['group'])) {
+                    $part['group'] = $c['group'];
+                }
                 $out[] = $part;
             }
         }

@@ -29,70 +29,100 @@ final class FurnitureLayoutEngine
         $mainH = max(1.0, $h - $plinth - $loftH);
         $internalW = max(1.0, $w - (2 * $t));
         $internalMainH = max(1.0, $mainH - (2 * $t));
+        $unit = $this->productLabel($templateCode, $p);
 
         $logical = [];
-        // Outer carcass sides span full height
-        $logical[] = $this->panel('Left Side', $h, $d, $t, 1);
-        $logical[] = $this->panel('Right Side', $h, $d, $t, 1);
-        $logical[] = $this->panel('Top', $internalW, $d, $t, 1);
-        $logical[] = $this->panel('Bottom', $internalW, $d, $t, 1);
-        $logical[] = $this->panel('Back', $h, $w, $backT, 1);
+        // Outer carcass
+        $logical[] = $this->panel($this->partName($unit, 'Left Panel'), $h, $d, $t, 1, 'carcass', 'LEFT_PANEL');
+        $logical[] = $this->panel($this->partName($unit, 'Right Panel'), $h, $d, $t, 1, 'carcass', 'RIGHT_PANEL');
+        $logical[] = $this->panel($this->partName($unit, 'Top Panel'), $internalW, $d, $t, 1, 'carcass', 'TOP_PANEL');
+        $logical[] = $this->panel($this->partName($unit, 'Bottom Panel'), $internalW, $d, $t, 1, 'carcass', 'BOTTOM_PANEL');
+        $logical[] = $this->panel($this->partName($unit, 'Back Panel'), $h, $w, $backT, 1, 'carcass', 'BACK_PANEL');
 
         if ($plinth > 0) {
-            $logical[] = $this->panel('Plinth Front', $w, $plinth, $t, 1);
-            $logical[] = $this->panel('Plinth Side', $d - $t, $plinth, $t, 2);
+            $logical[] = $this->panel($this->partName($unit, 'Plinth Front'), $w, $plinth, $t, 1, 'plinth', 'PLINTH_FRONT');
+            $logical[] = $this->panel($this->partName($unit, 'Plinth Side'), $d - $t, $plinth, $t, 2, 'plinth', 'PLINTH_SIDE');
         }
 
         if ($loftH > 0) {
-            $logical[] = $this->panel('Loft Shelf / Base', $internalW, max(1, $d - $t), $t, 1);
+            $logical[] = $this->panel($this->partName($unit, 'Loft Base Panel'), $internalW, max(1, $d - $t), $t, 1, 'loft', 'LOFT_BASE');
             $loftShelves = (int) ($loft['shelf_count'] ?? 0);
             if ($loftShelves > 0) {
-                $logical[] = $this->panel('Loft Shelf', $internalW, max(1, $d - $t), $t, $loftShelves);
+                $logical[] = $this->panel($this->partName($unit, 'Loft Shelf'), $internalW, max(1, $d - $t), $t, $loftShelves, 'loft', 'LOFT_SHELF');
             }
             $loftDoors = max(1, (int) ($p['shutter_count'] ?? count($layout['bays'])));
-            $logical[] = $this->panel('Loft Shutter', $loftH - $t, $internalW / $loftDoors, $t, $loftDoors);
-            $logical[] = $this->hardware('Loft Hinge', $loftDoors * 2);
+            $logical[] = $this->panel($this->partName($unit, 'Loft Shutter'), $loftH - $t, $internalW / $loftDoors, $t, $loftDoors, 'loft', 'LOFT_SHUTTER');
+            $logical[] = $this->hardware($this->partName($unit, 'Loft Hinge'), $loftDoors * 2, 'LOFT_HINGE');
         }
 
         $bays = $layout['bays'] ?? [];
         if ($bays === []) {
-            $bays = [['id' => 'bay-1', 'label' => 'Main', 'width_mm' => null, 'sections' => [
-                ['type' => 'SHELVES', 'shelf_count' => (int) ($p['shelf_count'] ?? 3)],
+            $bays = [['id' => 'bay-1', 'label' => 'Bay 1', 'width_mm' => null, 'sections' => [
+                ['type' => 'SHELVES', 'shelf_count' => (int) ($p['shelf_count'] ?? 3), 'label' => 'Shelves'],
             ]]];
         }
         $bayWidths = $this->resolveBayWidths($bays, $internalW, $partT);
-        $partitionCount = max(0, count($bayWidths) - 1);
-        if ($partitionCount > 0) {
-            $logical[] = $this->panel('Vertical Partition', $internalMainH, $d - $t, $partT, $partitionCount);
+
+        for ($i = 1; $i < count($bayWidths); $i++) {
+            $left = (string) ($bays[$i - 1]['label'] ?? ('Bay ' . $i));
+            $right = (string) ($bays[$i]['label'] ?? ('Bay ' . ($i + 1)));
+            $logical[] = $this->panel(
+                $this->partName($unit, "Vertical Partition ({$left} / {$right})"),
+                $internalMainH,
+                $d - $t,
+                $partT,
+                1,
+                'partition',
+                'VERTICAL_PARTITION'
+            );
         }
 
         foreach ($bayWidths as $idx => $bayW) {
             $bay = $bays[$idx];
-            $label = (string) ($bay['label'] ?? ('Bay ' . ($idx + 1)));
+            $bayLabel = (string) ($bay['label'] ?? ('Bay ' . ($idx + 1)));
             $sections = $this->normalizeSections($bay['sections'] ?? [], $internalMainH);
-            foreach ($sections as $sIdx => $section) {
+            foreach ($sections as $section) {
                 $type = strtoupper((string) ($section['type'] ?? 'OPEN'));
-                $secLabel = (string) ($section['label'] ?? $type);
-                $prefix = "{$label} {$secLabel}";
+                $secLabel = (string) ($section['label'] ?? ucfirst(strtolower($type)));
+                $secPrefix = "{$bayLabel} - {$secLabel}";
                 if ($type === 'SHELVES') {
                     $count = max(0, (int) ($section['shelf_count'] ?? 1));
                     if ($count > 0) {
-                        $logical[] = $this->panel("{$prefix} Shelf", max(1, $bayW - 2), max(1, $d - $t), $t, $count);
+                        $logical[] = $this->panel(
+                            $this->partName($unit, "{$secPrefix} - Shelf"),
+                            max(1, $bayW - 2),
+                            max(1, $d - $t),
+                            $t,
+                            $count,
+                            'shelf',
+                            'SHELF'
+                        );
                     }
                 } elseif ($type === 'DRAWERS') {
                     $count = max(1, (int) ($section['drawer_count'] ?? 1));
                     $drawerH = (float) ($section['drawer_height_mm'] ?? 180);
                     $drawerW = max(1, $bayW - 20);
                     $drawerD = max(1, $d - 40);
-                    $logical[] = $this->panel("{$prefix} Drawer Front", $drawerW, $drawerH, $t, $count);
-                    $logical[] = $this->panel("{$prefix} Drawer Side", $drawerD, $drawerH, $t, $count * 2);
-                    $logical[] = $this->panel("{$prefix} Drawer Back", $drawerW - (2 * $t), $drawerH, $t, $count);
-                    $logical[] = $this->panel("{$prefix} Drawer Bottom", $drawerW - (2 * $t), $drawerD - $t, $backT, $count);
-                    $logical[] = $this->hardware("{$prefix} Drawer Slide", $count * 2);
+                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Front"), $drawerW, $drawerH, $t, $count, 'drawer', 'DRAWER_FRONT');
+                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Side"), $drawerD, $drawerH, $t, $count * 2, 'drawer', 'DRAWER_SIDE');
+                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Back"), $drawerW - (2 * $t), $drawerH, $t, $count, 'drawer', 'DRAWER_BACK');
+                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Bottom"), $drawerW - (2 * $t), $drawerD - $t, $backT, $count, 'drawer', 'DRAWER_BOTTOM');
+                    $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Drawer Slide"), $count * 2, 'DRAWER_SLIDE');
                 } elseif ($type === 'HANGING') {
-                    $logical[] = $this->hardware("{$prefix} Hanging Rod", 1);
+                    // Rail/cleat board + hanging rod so the section appears on cutlist and hardware list
+                    $logical[] = $this->panel(
+                        $this->partName($unit, "{$secPrefix} - Rail Cleat"),
+                        max(1, $bayW - 2),
+                        80,
+                        $t,
+                        1,
+                        'hanging',
+                        'HANGING_CLEAT'
+                    );
+                    $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Hanging Rod"), 1, 'HANGING_ROD');
+                } elseif ($type === 'OPEN') {
+                    // Optional back-of-niche shelf strip not required; keep open void.
                 }
-                // OPEN: no extra panels
             }
         }
 
@@ -100,16 +130,42 @@ final class FurnitureLayoutEngine
         if ($doorType !== 'NONE' && $shutterCount > 0) {
             $doorH = $internalMainH;
             $doorW = $internalW / $shutterCount;
-            $name = $doorType === 'SLIDING' ? 'Sliding Door' : 'Shutter';
-            $logical[] = $this->panel($name, $doorH, $doorW, $t, $shutterCount);
-            if ($doorType === 'HINGED') {
-                $logical[] = $this->hardware('Hinge', $shutterCount * 2);
+            if ($doorType === 'SLIDING') {
+                $logical[] = $this->panel($this->partName($unit, 'Sliding Door'), $doorH, $doorW, $t, $shutterCount, 'door', 'SLIDING_DOOR');
+                $logical[] = $this->hardware($this->partName($unit, 'Sliding Track Set'), 1, 'SLIDING_TRACK');
             } else {
-                $logical[] = $this->hardware('Sliding Track Set', 1);
+                $logical[] = $this->panel($this->partName($unit, 'Shutter / Door'), $doorH, $doorW, $t, $shutterCount, 'door', 'SHUTTER');
+                $logical[] = $this->hardware($this->partName($unit, 'Hinge'), $shutterCount * 2, 'HINGE');
             }
         }
 
         return $logical;
+    }
+
+    /** Short product family label used as cutlist name prefix. */
+    public function productLabel(string $templateCode, array $p = []): string
+    {
+        if (!empty($p['product_label']) && is_string($p['product_label'])) {
+            return trim($p['product_label']);
+        }
+        return match (strtoupper($templateCode)) {
+            'WARDROBE', 'WARDROBE_SLIDING', 'WARDROBE_LOFT' => 'Wardrobe',
+            'TV_UNIT' => 'TV Unit',
+            'KITCHEN_BASE' => 'Kitchen Base',
+            'KITCHEN_WALL' => 'Kitchen Wall',
+            'KITCHEN_TALL' => 'Kitchen Tall',
+            'CHEST_DRAWERS' => 'Chest',
+            'BOOKCASE' => 'Bookcase',
+            'CROCKERY' => 'Crockery',
+            'VANITY' => 'Vanity',
+            'STUDY_TABLE' => 'Study Table',
+            default => ucwords(strtolower(str_replace('_', ' ', $templateCode))),
+        };
+    }
+
+    private function partName(string $unit, string $part): string
+    {
+        return trim($unit) . ' - ' . trim($part);
     }
 
     /**
@@ -122,7 +178,6 @@ final class FurnitureLayoutEngine
     {
         $layout = $p['layout'] ?? null;
         if (!is_array($layout)) {
-            // Legacy simple wardrobe params
             $shelfCount = (int) ($p['shelf_count'] ?? 3);
             $layout = [
                 'plinth_height_mm' => 0,
@@ -131,7 +186,7 @@ final class FurnitureLayoutEngine
                 'loft' => ['enabled' => false, 'height_mm' => 0, 'shelf_count' => 0],
                 'bays' => [[
                     'id' => 'bay-1',
-                    'label' => 'Main',
+                    'label' => 'Bay 1',
                     'width_mm' => null,
                     'sections' => [
                         ['type' => 'SHELVES', 'height_mm' => null, 'shelf_count' => $shelfCount, 'label' => 'Shelves'],
@@ -206,7 +261,7 @@ final class FurnitureLayoutEngine
     }
 
     /** @return array<string,mixed> */
-    private function panel(string $name, float $length, float $width, float $thickness, int $qty): array
+    private function panel(string $name, float $length, float $width, float $thickness, int $qty, string $group = 'panel', string $role = 'PANEL'): array
     {
         return [
             'name' => $name,
@@ -215,11 +270,13 @@ final class FurnitureLayoutEngine
             'thickness_mm' => $thickness,
             'qty' => max(1, $qty),
             'type' => 'PANEL',
+            'group' => $group,
+            'role' => $role,
         ];
     }
 
     /** @return array<string,mixed> */
-    private function hardware(string $name, int $qty): array
+    private function hardware(string $name, int $qty, string $role = 'HARDWARE'): array
     {
         return [
             'name' => $name,
@@ -228,6 +285,8 @@ final class FurnitureLayoutEngine
             'thickness_mm' => 0,
             'qty' => max(1, $qty),
             'type' => 'HARDWARE',
+            'group' => 'hardware',
+            'role' => $role,
         ];
     }
 }

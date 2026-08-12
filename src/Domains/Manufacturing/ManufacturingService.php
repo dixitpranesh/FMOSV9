@@ -21,11 +21,58 @@ final class ManufacturingService
         $sheetW = (float) $sheet['width_mm'];
         $issues = [];
 
-        foreach ($furniture['parameters'] as $k => $v) {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('SELECT parameters_json, code FROM furniture_templates WHERE id = ?');
+        $stmt->execute([(int) $furniture['template_id']]);
+        $template = $stmt->fetch() ?: [];
+        $defs = json_decode((string) ($template['parameters_json'] ?? '{}'), true) ?: [];
+        $params = is_array($furniture['parameters'] ?? null) ? $furniture['parameters'] : [];
+
+        foreach ($params as $k => $v) {
+            $def = $defs[$k] ?? null;
+            $type = is_array($def) ? ($def['type'] ?? 'number') : null;
+
+            // Structured / non-numeric params are valid by design.
+            if ($type === 'layout' || $type === 'object' || is_array($v)) {
+                if ($k === 'layout' && (!is_array($v) || !isset($v['bays']) || !is_array($v['bays']))) {
+                    $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => 'layout must include bays'];
+                }
+                continue;
+            }
+            if ($type === 'enum') {
+                $opts = $def['options'] ?? [];
+                if ($opts !== [] && !in_array($v, $opts, true)) {
+                    $issues[] = [
+                        'severity' => 'ERROR',
+                        'code' => 'PARAM',
+                        'message' => "{$k} must be one of " . implode(', ', $opts),
+                    ];
+                }
+                continue;
+            }
+            // door_type and similar strings without schema type
+            if ($def === null && !is_numeric($v) && is_string($v)) {
+                continue;
+            }
             if (!is_numeric($v)) {
-                $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => "{$k} invalid"];
+                $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => "{$k} must be numeric"];
+                continue;
+            }
+            $num = (float) $v;
+            if (is_array($def) && isset($def['min']) && $num < (float) $def['min']) {
+                $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => "{$k} below minimum {$def['min']}"];
+            }
+            if (is_array($def) && isset($def['max']) && $num > (float) $def['max']) {
+                $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => "{$k} exceeds maximum {$def['max']}"];
             }
         }
+
+        foreach (['width', 'height', 'depth'] as $dim) {
+            if (!isset($params[$dim]) || !is_numeric($params[$dim]) || (float) $params[$dim] <= 0) {
+                $issues[] = ['severity' => 'ERROR', 'code' => 'PARAM', 'message' => "{$dim} is required"];
+            }
+        }
+
         foreach ($furniture['component_rows'] as $c) {
             if (($c['component_type'] ?? '') === 'HARDWARE') {
                 continue;
@@ -40,12 +87,21 @@ final class ManufacturingService
                 $issues[] = ['severity' => 'INFO', 'code' => 'PANEL_SPLIT', 'message' => $c['name'] . ': ' . $c['manufacturing_data']['note']];
             }
         }
-        $hasBlocker = (bool) array_filter($issues, static fn ($i) => $i['severity'] === 'BLOCKER');
+
+        $hasBlocker = (bool) array_filter($issues, static fn ($i) => ($i['severity'] ?? '') === 'BLOCKER');
+        $hasError = (bool) array_filter($issues, static fn ($i) => ($i['severity'] ?? '') === 'ERROR');
         return [
             'furniture_id' => $furnitureId,
-            'ok' => !$hasBlocker,
+            'ok' => !$hasBlocker && !$hasError,
             'issues' => $issues,
             'sheet' => $sheet,
+            'summary' => [
+                'code' => $furniture['code'] ?? null,
+                'name' => $furniture['name'] ?? null,
+                'parts' => count($furniture['component_rows'] ?? []),
+                'errors' => count(array_filter($issues, static fn ($i) => in_array($i['severity'] ?? '', ['ERROR', 'BLOCKER'], true))),
+                'infos' => count(array_filter($issues, static fn ($i) => ($i['severity'] ?? '') === 'INFO')),
+            ],
             'furniture' => $furniture,
         ];
     }
@@ -185,13 +241,18 @@ final class ManufacturingService
 
             $publicId = sprintf('P-%d-%d-R%d-%d', $projectId, $furnitureId, $rev, $panelSeq);
             $note = $c['manufacturing_data']['note'] ?? null;
+            $desc = $c['name'];
+            $furnitureCode = $furniture['code'] ?? null;
+            if ($furnitureCode && !str_contains((string) $desc, (string) $furnitureCode)) {
+                // Keep part name as primary description; code is available on package.
+            }
             $stmt = $pdo->prepare('INSERT INTO panels (
                 tenant_id, project_id, manufacturing_package_id, furniture_id, component_id, public_id, name, material_name, material_id, finish_id, finish_name,
                 thickness_mm, length_mm, width_mm, finishing_length_mm, finishing_width_mm, cutting_length_mm, cutting_width_mm,
                 quantity, grain_direction, edge_json, edge_1, edge_2, edge_3, edge_4, note, status, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
             $stmt->execute([
-                $tenantId, $projectId, $pkgId, $furnitureId, (int) $c['id'], $publicId, $c['name'], 'Board',
+                $tenantId, $projectId, $pkgId, $furnitureId, (int) $c['id'], $publicId, $desc, 'Board',
                 $compFinishId, $compFinishName,
                 $c['thickness_mm'], $cutL, $cutW, $finL, $finW, $cutL, $cutW,
                 $c['quantity'], 'LENGTH',
@@ -205,7 +266,7 @@ final class ManufacturingService
                 edge_1, edge_2, edge_3, edge_4, note, rotate_flag
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)');
             $stmt->execute([
-                $tenantId, $pkgId, $panelId, $c['name'], $cutL, $cutW, $c['thickness_mm'], $c['quantity'], 'Board',
+                $tenantId, $pkgId, $panelId, $desc, $cutL, $cutW, $c['thickness_mm'], $c['quantity'], 'Board',
                 $finL, $finW, $cutL, $cutW, $compFinishName, $compFinishName,
                 $e1, $e2, $e3, $e4, $note,
             ]);
@@ -293,13 +354,42 @@ final class ManufacturingService
     {
         $pkg = $this->getPackage($tenantId, $packageId);
         $items = $pkg['cutlist'];
+        $furniture = null;
+        $hardware = [];
+        if (!empty($pkg['furniture_id'])) {
+            $furniture = (new FurnitureEngine())->get($tenantId, (int) $pkg['furniture_id']);
+            foreach ($furniture['component_rows'] ?? [] as $c) {
+                if (($c['component_type'] ?? '') !== 'HARDWARE') {
+                    continue;
+                }
+                $hardware[] = [
+                    'description' => $c['name'],
+                    'quantity' => $c['quantity'],
+                    'material_name' => 'Hardware',
+                    'note' => $c['component_key'] ?? null,
+                    'thickness_mm' => 0,
+                    'finishing_length_mm' => 0,
+                    'finishing_width_mm' => 0,
+                    'cutting_length_mm' => 0,
+                    'cutting_width_mm' => 0,
+                    'colour' => null,
+                    'edge_1' => null,
+                    'edge_2' => null,
+                    'edge_3' => null,
+                    'edge_4' => null,
+                ];
+            }
+        }
         if ($scope === 'furniture' && $pkg['furniture_id']) {
             // already package-scoped to one furniture
         }
         return [
             'package_id' => $packageId,
             'furniture_id' => $pkg['furniture_id'],
+            'furniture_code' => $furniture['code'] ?? null,
+            'furniture_name' => $furniture['name'] ?? null,
             'items' => $items,
+            'hardware' => $hardware,
             'columns' => ['description', 'finishing_length_mm', 'finishing_width_mm', 'cutting_length_mm', 'cutting_width_mm', 'thickness_mm', 'quantity', 'material_name', 'colour', 'edge_1', 'edge_2', 'edge_3', 'edge_4', 'note'],
         ];
     }

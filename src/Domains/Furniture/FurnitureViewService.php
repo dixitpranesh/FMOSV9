@@ -137,17 +137,25 @@ final class FurnitureViewService
                     $m = $matSvc->get($tenantId, $finishId);
                     $url = null;
                     foreach ($m['assets'] ?? [] as $a) {
-                        if (($a['asset_type'] ?? '') === 'TEXTURE_ALBEDO') {
+                        if (($a['asset_type'] ?? '') === 'TEXTURE_ALBEDO' && !empty($a['public_url'])) {
                             $url = $a['public_url'];
                             break;
+                        }
+                    }
+                    if ($url === null) {
+                        foreach ($m['assets'] ?? [] as $a) {
+                            if (!empty($a['public_url'])) {
+                                $url = $a['public_url'];
+                                break;
+                            }
                         }
                     }
                     $finishCache[$finishId] = [
                         'id' => $finishId,
                         'sku' => $m['sku'],
                         'texture_url' => $url,
-                        'roughness' => (float) $m['default_roughness'],
-                        'metalness' => (float) $m['default_metalness'],
+                        'roughness' => (float) ($m['default_roughness'] ?? 0.55),
+                        'metalness' => (float) ($m['default_metalness'] ?? 0),
                     ];
                 } catch (\Throwable) {
                     $finishCache[$finishId] = null;
@@ -212,7 +220,7 @@ final class FurnitureViewService
         if ($doorType !== 'NONE' && $shutters > 0) {
             $sw = $internalW / $shutters;
             $componentRows = $furniture['component_rows'] ?? [];
-            $shutterRows = array_values(array_filter($componentRows, static fn ($r) => preg_match('/shutter|sliding door/i', (string) $r['name'])));
+            $shutterRows = array_values(array_filter($componentRows, static fn ($r) => preg_match('/shutter|sliding door|door/i', (string) $r['name'])));
             for ($i = 0; $i < $shutters; $i++) {
                 $finish = $exterior;
                 if (isset($shutterRows[$i]) && !empty($shutterRows[$i]['finish_id'])) {
@@ -304,7 +312,8 @@ final class FurnitureViewService
             'size' => [round($sx, 2), round($sy, 2), round($sz, 2)],
             'position' => [round($x, 2), round($y, 2), round($z, 2)],
             'finish' => $finish,
-            'color' => $finish ? null : ($role === 'shutter' ? '#c9d6df' : '#e6ebf0'),
+            // Keep a visible fallback color so 3D never goes black if texture is slow/missing.
+            'color' => $role === 'shutter' ? '#c9d6df' : '#e6ebf0',
         ];
     }
 }
