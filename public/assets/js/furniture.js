@@ -140,11 +140,11 @@ function clone(v) {
 }
 
 function defaultSection(type = 'SHELVES') {
-  if (type === 'DRAWERS') return { type: 'DRAWERS', height_mm: 600, drawer_count: 3, drawer_height_mm: 180, label: 'Drawers' };
-  if (type === 'HANGING') return { type: 'HANGING', height_mm: 1100, label: 'Hanging' };
+  if (type === 'DRAWERS') return { type: 'DRAWERS', height_mm: 600, drawer_count: 3, drawer_height_mm: 180, label: 'Drawers', cutlery_organizer: false };
+  if (type === 'HANGING') return { type: 'HANGING', height_mm: 1100, label: 'Hanging', hanging_style: 'standard' };
   if (type === 'OPEN') return { type: 'OPEN', height_mm: null, label: 'Open' };
   if (type === 'MIRROR') return { type: 'MIRROR', height_mm: null, label: 'Mirror', mirror_margin_mm: 80, mirror_width_mm: null, mirror_height_mm: null };
-  return { type: 'SHELVES', height_mm: null, shelf_count: 3, label: 'Shelves' };
+  return { type: 'SHELVES', height_mm: null, shelf_count: 3, label: 'Shelves', shelf_style: 'standard' };
 }
 
 function emptyLayout(doorType = 'HINGED') {
@@ -730,6 +730,46 @@ export async function mountFurniture(main) {
             <label>Shelves <input data-bi="${bi}" data-si="${si}" class="sec-shelves" type="number" value="${sec.shelf_count ?? 0}" style="width:3.5rem"></label>
             <label>Drawers <input data-bi="${bi}" data-si="${si}" class="sec-drawers" type="number" value="${sec.drawer_count ?? 0}" style="width:3.5rem"></label>
             <label>Dr H <input data-bi="${bi}" data-si="${si}" class="sec-drh" type="number" value="${sec.drawer_height_mm ?? 180}" style="width:3.5rem"></label>
+            ${sec.type === 'HANGING' ? `
+            <label title="standard / long (top shelf) / double (two rods)">Hanging
+              <select data-bi="${bi}" data-si="${si}" class="sec-hang-style">
+                ${['standard', 'long', 'double'].map((s) => `<option value="${s}" ${String(sec.hanging_style || 'standard') === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+            </label>
+            ` : ''}
+            ${sec.type === 'SHELVES' ? `
+            <label title="standard / shoe / plate_tray / bottle">Shelf style
+              <select data-bi="${bi}" data-si="${si}" class="sec-shelf-style">
+                ${['standard', 'shoe', 'plate_tray', 'bottle'].map((s) => `<option value="${s}" ${String(sec.shelf_style || 'standard') === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+            </label>
+            ` : ''}
+            ${sec.type === 'DRAWERS' ? `
+            <label title="Adds cutlery organizer hardware to manufacturing BOM" class="sec-cutlery-wrap">
+              <input data-bi="${bi}" data-si="${si}" class="sec-cutlery" type="checkbox" ${sec.cutlery_organizer ? 'checked' : ''}> Cutlery org
+            </label>
+            <label title="Wicker/laundry baskets instead of wood drawer boxes" class="sec-wicker-wrap">
+              <input data-bi="${bi}" data-si="${si}" class="sec-wicker" type="checkbox" ${sec.wicker_basket ? 'checked' : ''}> Wicker
+            </label>
+            ` : ''}
+            ${sec.type === 'OPEN' ? `
+            <label title="Specialty open bay">Open type
+              <select data-bi="${bi}" data-si="${si}" class="sec-open-style">
+                ${[
+                  ['standard', 'standard'],
+                  ['waste', 'waste bin'],
+                  ['trouser', 'trouser rack'],
+                  ['hob', 'hob bay'],
+                ].map(([v, lab]) => {
+                  let cur = 'standard';
+                  if (sec.waste_bin) cur = 'waste';
+                  else if (sec.trouser_rack) cur = 'trouser';
+                  else if (sec.hob_bay) cur = 'hob';
+                  return `<option value="${v}" ${cur === v ? 'selected' : ''}>${lab}</option>`;
+                }).join('')}
+              </select>
+            </label>
+            ` : ''}
             ${sec.type === 'MIRROR' ? `
             <label title="Inset from section edges; 0 = full-section glass">Mirror margin <input data-bi="${bi}" data-si="${si}" class="sec-mmargin" type="number" value="${sec.mirror_margin_mm ?? 80}" style="width:3.5rem"></label>
             <label title="Optional override; blank uses section − 2×margin">Mirror W <input data-bi="${bi}" data-si="${si}" class="sec-mw" type="number" placeholder="auto" value="${sec.mirror_width_mm ?? ''}" style="width:4rem"></label>
@@ -776,6 +816,27 @@ export async function mountFurniture(main) {
     host.querySelectorAll('.sec-shelves').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].shelf_count = Number(el.value || 0); });
     host.querySelectorAll('.sec-drawers').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].drawer_count = Number(el.value || 0); });
     host.querySelectorAll('.sec-drh').forEach((el) => el.oninput = () => { draftLayout.bays[el.dataset.bi].sections[el.dataset.si].drawer_height_mm = Number(el.value || 180); });
+    host.querySelectorAll('.sec-hang-style').forEach((el) => el.onchange = () => {
+      draftLayout.bays[el.dataset.bi].sections[el.dataset.si].hanging_style = el.value || 'standard';
+    });
+    host.querySelectorAll('.sec-shelf-style').forEach((el) => el.onchange = () => {
+      draftLayout.bays[el.dataset.bi].sections[el.dataset.si].shelf_style = el.value || 'standard';
+    });
+    host.querySelectorAll('.sec-cutlery').forEach((el) => el.onchange = () => {
+      draftLayout.bays[el.dataset.bi].sections[el.dataset.si].cutlery_organizer = !!el.checked;
+    });
+    host.querySelectorAll('.sec-wicker').forEach((el) => el.onchange = () => {
+      draftLayout.bays[el.dataset.bi].sections[el.dataset.si].wicker_basket = !!el.checked;
+    });
+    host.querySelectorAll('.sec-open-style').forEach((el) => el.onchange = () => {
+      const sec = draftLayout.bays[el.dataset.bi].sections[el.dataset.si];
+      sec.waste_bin = el.value === 'waste';
+      sec.trouser_rack = el.value === 'trouser';
+      sec.hob_bay = el.value === 'hob';
+      if (el.value === 'waste') sec.label = sec.label || 'Waste bin';
+      if (el.value === 'trouser') sec.label = sec.label || 'Trouser pull-out';
+      if (el.value === 'hob') sec.label = sec.label || 'Hob bay';
+    });
     host.querySelectorAll('.sec-mmargin').forEach((el) => el.oninput = () => {
       draftLayout.bays[el.dataset.bi].sections[el.dataset.si].mirror_margin_mm = el.value === '' ? 80 : Number(el.value);
     });

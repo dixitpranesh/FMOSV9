@@ -31,6 +31,7 @@ final class FurnitureExpo
         'LOFT_BASE' => 'Loft Base',
         'HANGING_CLEAT' => 'Hanging Cleat',
         'DRAWER_FRONT' => 'Drawer Front',
+        'WICKER_FRONT' => 'Wicker Basket Front',
         'MIRROR_PANEL' => 'Mirror (glass)',
         'NICHE_BACK' => 'Dressing Niche Back',
         'NICHE_SIDE_LEFT' => 'Dressing Niche Side (Left)',
@@ -46,7 +47,7 @@ final class FurnitureExpo
     {
         // Mirror is glass — never implied EXPO laminate. Niche liners are client-visible surrounds.
         return [
-            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT',
+            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT', 'WICKER_FRONT',
             'NICHE_BACK', 'NICHE_SIDE_LEFT', 'NICHE_SIDE_RIGHT', 'NICHE_SILL', 'NICHE_HEADER',
             'FILLER_LEFT', 'FILLER_RIGHT',
         ];

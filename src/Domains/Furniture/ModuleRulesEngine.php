@@ -95,6 +95,10 @@ final class ModuleRulesEngine
         $d = (float) ($dims['depth'] ?? 0);
         $present = $this->detectPresentConfigIds($layout);
 
+        foreach (FmosV2RulesBridge::moduleDimensionIssues($moduleType, $dims) as $issue) {
+            $issues[] = $issue;
+        }
+
         foreach ($present as $cfgId) {
             $cfg = InternalConfigCatalog::get($cfgId);
             if ($cfg === null) {
@@ -246,7 +250,29 @@ final class ModuleRulesEngine
             }
             $layout['bays'][$i]['sections'] = array_values(array_filter(
                 $bay['sections'] ?? [],
-                static fn ($s) => strtoupper((string) ($s['type'] ?? '')) !== $type
+                static function ($s) use ($configId, $type): bool {
+                    $secType = strtoupper((string) ($s['type'] ?? ''));
+                    if ($secType !== $type) {
+                        return true;
+                    }
+                    $shelfStyle = strtolower((string) ($s['shelf_style'] ?? ''));
+                    $hangStyle = strtolower((string) ($s['hanging_style'] ?? ''));
+                    return match ($configId) {
+                        'CFG_KB_PLATE_TRAY' => !in_array($shelfStyle, ['plate_tray', 'plate'], true),
+                        'CFG_KB_BOTTLE' => $shelfStyle !== 'bottle',
+                        'CFG_SHOE' => $shelfStyle !== 'shoe',
+                        'CFG_HANGING_LONG' => $hangStyle !== 'long',
+                        'CFG_HANGING_DOUBLE' => !in_array($hangStyle, ['double', 'short'], true),
+                        'CFG_KB_CUTLERY' => empty($s['cutlery_organizer']),
+                        'CFG_WICKER' => empty($s['wicker_basket']),
+                        'CFG_KB_WASTE' => empty($s['waste_bin']),
+                        'CFG_TROUSER' => empty($s['trouser_rack']),
+                        'CFG_KB_HOB' => empty($s['hob_bay']),
+                        'CFG_KB_SINK' => !str_contains(strtolower((string) ($s['label'] ?? '')), 'plumb')
+                            && !str_contains(strtolower((string) ($s['label'] ?? '')), 'sink'),
+                        default => false,
+                    };
+                }
             ));
             if ($layout['bays'][$i]['sections'] === []) {
                 $layout['bays'][$i]['sections'] = [[
@@ -298,6 +324,43 @@ final class ModuleRulesEngine
         }
         if (isset($sectionTypes['MIRROR'])) {
             $found['CFG_MIRROR'] = true;
+        }
+
+        foreach ($layout['bays'] ?? [] as $bay) {
+            foreach ($bay['sections'] ?? [] as $sec) {
+                $type = strtoupper((string) ($sec['type'] ?? ''));
+                $hangStyle = strtolower((string) ($sec['hanging_style'] ?? ''));
+                if ($type === 'HANGING' && $hangStyle === 'long') {
+                    $found['CFG_HANGING_LONG'] = true;
+                }
+                if ($type === 'HANGING' && ($hangStyle === 'double' || $hangStyle === 'short')) {
+                    $found['CFG_HANGING_DOUBLE'] = true;
+                }
+                if ($type === 'SHELVES' && strtolower((string) ($sec['shelf_style'] ?? '')) === 'shoe') {
+                    $found['CFG_SHOE'] = true;
+                }
+                if ($type === 'SHELVES' && in_array(strtolower((string) ($sec['shelf_style'] ?? '')), ['plate_tray', 'plate'], true)) {
+                    $found['CFG_KB_PLATE_TRAY'] = true;
+                }
+                if ($type === 'SHELVES' && strtolower((string) ($sec['shelf_style'] ?? '')) === 'bottle') {
+                    $found['CFG_KB_BOTTLE'] = true;
+                }
+                if ($type === 'DRAWERS' && !empty($sec['cutlery_organizer'])) {
+                    $found['CFG_KB_CUTLERY'] = true;
+                }
+                if ($type === 'DRAWERS' && !empty($sec['wicker_basket'])) {
+                    $found['CFG_WICKER'] = true;
+                }
+                if ($type === 'OPEN' && !empty($sec['waste_bin'])) {
+                    $found['CFG_KB_WASTE'] = true;
+                }
+                if ($type === 'OPEN' && !empty($sec['trouser_rack'])) {
+                    $found['CFG_TROUSER'] = true;
+                }
+                if ($type === 'OPEN' && !empty($sec['hob_bay'])) {
+                    $found['CFG_KB_HOB'] = true;
+                }
+            }
         }
         return array_keys($found);
     }

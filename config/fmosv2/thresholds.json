@@ -1,0 +1,224 @@
+{
+    "_meta": {
+        "source": "FMOSV2 frontend/data/configuration-rules.json thresholds",
+        "imported_at": "2026-08-16",
+        "rule_source": "fmosv2_configuration-rules"
+    },
+    "thresholds": {
+        "door_section": {
+            "single_door_max_width_mm": 900,
+            "double_door_min_width_mm": 400,
+            "max_section_width_mm": 1200,
+            "sliding_door_min_width_mm": 600,
+            "lift_up_min_height_mm": 400,
+            "folding_door_max_height_mm": 1800,
+            "glass_door_min_clips": 2,
+            "push_to_open_min_width_mm": 300,
+            "heavy_door_weight_kg": 4,
+            "mirror_door_frame_height_mm": 1800,
+            "single_door_recommend_width_mm": 700,
+            "bi_fold_max_leaf_width_mm": 500,
+            "glass_door_hinge_types": [
+                "glass_clamp_hinge",
+                "blum_clip_glass_95",
+                "hettich_sensys_glass",
+                "hafele_glass_hinge"
+            ]
+        },
+        "structural": {
+            "tall_unit_anchor_height_mm": 1500,
+            "height_depth_tip_over_ratio": 3.5,
+            "tall_pantry_top_fix_height_mm": 2100,
+            "wide_unit_divider_width_mm": 1200,
+            "open_shelf_max_span_mm": 800,
+            "floor_ceiling_anchor_height_mm": 2200,
+            "side_panel_upgrade_height_mm": 1800,
+            "countertop_max_span_mm": 900,
+            "wardrobe_hanging_min_depth_mm": 550,
+            "kitchen_base_height_min_mm": 720,
+            "kitchen_base_height_max_mm": 780,
+            "kitchen_base_stretcher_rail_depth_mm": 90,
+            "sink_back_panel_cutout_max_height_mm": 300,
+            "min_plinth_height_mm": 100,
+            "wide_shelf_load_trigger_kg": 15,
+            "wide_shelf_divider_width_mm": 1000,
+            "particle_board_span_upgrade_mm": 800
+        },
+        "hardware": {
+            "heavy_duty_runner_threshold_kg": 30,
+            "runner_max_standard_load_kg": 50,
+            "drawer_min_height_mm": 80,
+            "drawer_max_tandem_height_mm": 450,
+            "tandem_min_section_width_mm": 250,
+            "pull_out_shelf_min_depth_mm": 400,
+            "wicker_basket_min_width_mm": 350,
+            "trouser_rack_min_width_mm": 450,
+            "pull_out_pantry_max_width_mm": 300,
+            "lift_system_min_height_mm": 400,
+            "appliance_garage_min_height_mm": 450,
+            "deep_drawer_recommend_height_mm": 300,
+            "soft_close_hinge_types": [
+                "blum_clip_blumotion",
+                "hettich_sensys_tl",
+                "grass_tiomos_sc",
+                "soft_close",
+                "blum_clip"
+            ]
+        },
+        "material": {
+            "heat_zone_forbidden": [
+                "mdf",
+                "particle_board"
+            ],
+            "wet_zone_forbidden_back_panel": [
+                "particle_board",
+                "mdf"
+            ],
+            "countertop_forbidden": [
+                "particle_board"
+            ],
+            "kitchen_plinth_forbidden": [
+                "particle_board",
+                "mdf"
+            ],
+            "high_humidity_rooms": [
+                "bathroom",
+                "kitchen",
+                "utility",
+                "laundry"
+            ],
+            "exterior_forbidden": [
+                "mdf",
+                "particle_board"
+            ],
+            "veneer_risk_rooms": [
+                "bathroom",
+                "utility"
+            ]
+        },
+        "dimension": {
+            "furniture_type_limits": {
+                "wardrobe": {
+                    "width": {
+                        "min": 450,
+                        "max": 3600
+                    },
+                    "height": {
+                        "min": 1200,
+                        "max": 2700
+                    },
+                    "depth": {
+                        "min": 550,
+                        "max": 700
+                    }
+                },
+                "kitchen": {
+                    "width": {
+                        "min": 300,
+                        "max": 4800
+                    },
+                    "height": {
+                        "min": 720,
+                        "max": 2700
+                    },
+                    "depth": {
+                        "min": 500,
+                        "max": 700
+                    }
+                },
+                "base_cabinet": {
+                    "width": {
+                        "min": 300,
+                        "max": 1200
+                    },
+                    "height": {
+                        "min": 700,
+                        "max": 780
+                    },
+                    "depth": {
+                        "min": 500,
+                        "max": 650
+                    }
+                },
+                "wall_cabinet": {
+                    "width": {
+                        "min": 300,
+                        "max": 1200
+                    },
+                    "height": {
+                        "min": 300,
+                        "max": 900
+                    },
+                    "depth": {
+                        "min": 280,
+                        "max": 380
+                    }
+                },
+                "tv_unit": {
+                    "width": {
+                        "min": 900,
+                        "max": 3600
+                    },
+                    "height": {
+                        "min": 250,
+                        "max": 700
+                    },
+                    "depth": {
+                        "min": 300,
+                        "max": 600
+                    }
+                },
+                "tv_wall_unit": {
+                    "width": {
+                        "min": 2400,
+                        "max": 6000
+                    },
+                    "height": {
+                        "min": 2100,
+                        "max": 3200
+                    },
+                    "depth": {
+                        "min": 300,
+                        "max": 450
+                    }
+                },
+                "shelf_unit": {
+                    "width": {
+                        "min": 300,
+                        "max": 2400
+                    },
+                    "height": {
+                        "min": 400,
+                        "max": 2700
+                    },
+                    "depth": {
+                        "min": 200,
+                        "max": 600
+                    }
+                },
+                "sideboard": {
+                    "width": {
+                        "min": 600,
+                        "max": 2400
+                    },
+                    "height": {
+                        "min": 400,
+                        "max": 1000
+                    },
+                    "depth": {
+                        "min": 350,
+                        "max": 600
+                    }
+                }
+            },
+            "global_min_section_width_mm": 250,
+            "global_min_depth_mm": 150,
+            "global_max_depth_mm": 800,
+            "kitchen_wall_cabinet_max_depth_mm": 350,
+            "wardrobe_min_depth_mm": 550,
+            "countertop_max_overhang_mm": 300,
+            "corner_section_min_width_per_side_mm": 600,
+            "tv_unit_depth_warning_mm": 600
+        }
+    }
+}

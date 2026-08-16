@@ -99,7 +99,7 @@ final class PanelFinishResolver
             'TOP_PANEL' => 2,    // +Y outside
             'BOTTOM_PANEL' => 3, // -Y outside
             'BACK_PANEL' => 5,   // -Z outside (rear of unit)
-            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT', 'NICHE_BACK' => 4, // +Z front
+            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT', 'WICKER_FRONT', 'NICHE_BACK' => 4, // +Z front
             'NICHE_SIDE_LEFT' => 0,  // +X toward niche opening
             'NICHE_SIDE_RIGHT' => 1, // -X toward niche opening
             'NICHE_SILL' => 2,       // +Y top of sill

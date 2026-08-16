@@ -64,18 +64,23 @@ final class ExportService
             }
             foreach ($cut['hardware'] ?? [] as $row) {
                 $sl++;
+                $desc = (string) ($row['description'] ?? '');
+                $sku = (string) ($row['sku'] ?? '');
+                if ($sku !== '' && !str_contains($desc, $sku)) {
+                    $desc = $sku . ' — ' . $desc;
+                }
                 $lines[] = implode(',', [
                     $sl,
                     $this->csv($code),
                     $this->csv($name),
-                    $this->csv(TextNormalizer::ascii((string) ($row['description'] ?? ''))),
+                    $this->csv(TextNormalizer::ascii($desc)),
                     '',
                     '',
                     '',
                     '',
                     '',
                     $row['quantity'] ?? '',
-                    $this->csv('Hardware'),
+                    $this->csv(TextNormalizer::ascii($sku !== '' ? $sku : 'Hardware')),
                     '',
                     '',
                     '',

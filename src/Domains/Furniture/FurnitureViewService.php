@@ -113,6 +113,26 @@ final class FurnitureViewService
                     }
                     if ($type === 'SHELVES') {
                         $count = max(1, (int) ($sec['shelf_count'] ?? 1));
+                        $style = strtolower((string) ($sec['shelf_style'] ?? ''));
+                        $isShoe = $style === 'shoe';
+                        $isPlate = $style === 'plate_tray' || $style === 'plate';
+                        $isBottle = $style === 'bottle';
+                        $label = 'Shelf';
+                        $role = 'shelf';
+                        $comp = 'SHELF';
+                        if ($isShoe) {
+                            $label = 'Shoe shelf';
+                            $role = 'shoe';
+                            $comp = 'SHELF_SHOE';
+                        } elseif ($isPlate) {
+                            $label = 'Plate tray';
+                            $role = 'plate_tray';
+                            $comp = 'SHELF_PLATE_TRAY';
+                        } elseif ($isBottle) {
+                            $label = 'Bottle rack';
+                            $role = 'bottle';
+                            $comp = 'SHELF_BOTTLE';
+                        }
                         for ($s = 1; $s <= $count; $s++) {
                             $sy = $y + ($secH * $s / ($count + 1));
                             $elements[] = [
@@ -121,18 +141,104 @@ final class FurnitureViewService
                                 'y1' => $sy,
                                 'x2' => $x + $bayW - 4,
                                 'y2' => $sy,
-                                'label' => 'Shelf',
-                                'role' => 'shelf',
+                                'label' => $label,
+                                'role' => $role,
                                 'expo' => $shelvesExpo,
+                                'component_role' => $comp,
+                            ];
+                        }
+                    }
+                    if ($type === 'HANGING') {
+                        $style = strtolower((string) ($sec['hanging_style'] ?? 'standard'));
+                        $rodYs = [$y + $secH * 0.72];
+                        if ($style === 'double' || $style === 'short') {
+                            $rodYs = [$y + $secH * 0.78, $y + $secH * 0.38];
+                            $elements[] = [
+                                'type' => 'line',
+                                'x1' => $x + 4,
+                                'y1' => $y + $secH * 0.55,
+                                'x2' => $x + $bayW - 4,
+                                'y2' => $y + $secH * 0.55,
+                                'label' => 'Mid shelf',
+                                'role' => 'shelf',
                                 'component_role' => 'SHELF',
+                            ];
+                        } elseif ($style === 'long') {
+                            $rodYs = [$y + $secH * 0.82];
+                            $elements[] = [
+                                'type' => 'line',
+                                'x1' => $x + 4,
+                                'y1' => $y + $secH * 0.12,
+                                'x2' => $x + $bayW - 4,
+                                'y2' => $y + $secH * 0.12,
+                                'label' => 'Top shelf',
+                                'role' => 'shelf',
+                                'component_role' => 'SHELF',
+                            ];
+                        }
+                        foreach ($rodYs as $ri => $ry) {
+                            $elements[] = [
+                                'type' => 'line',
+                                'x1' => $x + 8,
+                                'y1' => $ry,
+                                'x2' => $x + $bayW - 8,
+                                'y2' => $ry,
+                                'label' => $ri === 0 ? 'Hanging rod' : 'Lower rod',
+                                'role' => 'hanging',
+                                'component_role' => 'HANGING_ROD',
                             ];
                         }
                     }
                     if ($type === 'DRAWERS') {
                         $count = max(1, (int) ($sec['drawer_count'] ?? 1));
+                        $isWicker = !empty($sec['wicker_basket']);
                         for ($s = 1; $s <= $count; $s++) {
                             $dy = $y + ($secH * $s / ($count + 1));
-                            $elements[] = ['type' => 'line', 'x1' => $x + 6, 'y1' => $dy, 'x2' => $x + $bayW - 6, 'y2' => $dy, 'label' => 'Drawer', 'role' => 'drawer'];
+                            $elements[] = [
+                                'type' => 'line',
+                                'x1' => $x + 6,
+                                'y1' => $dy,
+                                'x2' => $x + $bayW - 6,
+                                'y2' => $dy,
+                                'label' => $isWicker ? 'Wicker basket' : 'Drawer',
+                                'role' => $isWicker ? 'wicker' : 'drawer',
+                                'component_role' => $isWicker ? 'WICKER_FRONT' : 'DRAWER_FRONT',
+                            ];
+                        }
+                    }
+                    if ($type === 'OPEN') {
+                        if (!empty($sec['waste_bin'])) {
+                            $elements[] = [
+                                'type' => 'callout',
+                                'text' => 'Waste bin',
+                                'anchor_x' => $x + $bayW * 0.5,
+                                'anchor_y' => $y + $secH * 0.5,
+                                'side' => 'center',
+                                'role' => 'waste',
+                                'component_role' => 'WASTE_BIN',
+                            ];
+                        }
+                        if (!empty($sec['trouser_rack'])) {
+                            $elements[] = [
+                                'type' => 'callout',
+                                'text' => 'Trouser rack',
+                                'anchor_x' => $x + $bayW * 0.5,
+                                'anchor_y' => $y + $secH * 0.5,
+                                'side' => 'center',
+                                'role' => 'trouser',
+                                'component_role' => 'TROUSER_RACK',
+                            ];
+                        }
+                        if (!empty($sec['hob_bay'])) {
+                            $elements[] = [
+                                'type' => 'callout',
+                                'text' => 'Hob bay',
+                                'anchor_x' => $x + $bayW * 0.5,
+                                'anchor_y' => $y + $secH * 0.5,
+                                'side' => 'center',
+                                'role' => 'hob',
+                                'component_role' => 'HOB_CLEARANCE',
+                            ];
                         }
                     }
                     $y += $secH;
@@ -424,9 +530,104 @@ final class FurnitureViewService
                 $type = strtoupper((string) ($sec['type'] ?? 'OPEN'));
                 if ($type === 'SHELVES') {
                     $count = max(1, (int) ($sec['shelf_count'] ?? 1));
+                    $style = strtolower((string) ($sec['shelf_style'] ?? ''));
+                    $isShoe = $style === 'shoe';
+                    $isPlate = $style === 'plate_tray' || $style === 'plate';
+                    $isBottle = $style === 'bottle';
+                    $name = 'Shelf';
+                    $vis = 'shelf';
+                    $comp = 'SHELF';
+                    if ($isShoe) {
+                        $name = 'Shoe Shelf';
+                        $vis = 'shoe';
+                        $comp = 'SHELF_SHOE';
+                    } elseif ($isPlate) {
+                        $name = 'Plate Tray';
+                        $vis = 'plate_tray';
+                        $comp = 'SHELF_PLATE_TRAY';
+                    } elseif ($isBottle) {
+                        $name = 'Bottle Rack';
+                        $vis = 'bottle';
+                        $comp = 'SHELF_BOTTLE';
+                    }
                     for ($s = 1; $s <= $count; $s++) {
                         $sy = $band['y0'] + ($secH * $s / ($count + 1));
-                        $makePanel('Shelf', max(1, $bayW - 4), $t, $internalDepth, $x + $bayW / 2, $sy, $backT + $internalDepth / 2, 'shelf', 'SHELF');
+                        $makePanel(
+                            $name,
+                            max(1, $bayW - 4),
+                            $t,
+                            $internalDepth,
+                            $x + $bayW / 2,
+                            $sy,
+                            $backT + $internalDepth / 2,
+                            $vis,
+                            $comp
+                        );
+                    }
+                } elseif ($type === 'HANGING') {
+                    $style = strtolower((string) ($sec['hanging_style'] ?? 'standard'));
+                    $rodPositions = [0.72];
+                    if ($style === 'double' || $style === 'short') {
+                        $rodPositions = [0.78, 0.38];
+                        $makePanel(
+                            'Hanging Mid Shelf',
+                            max(1, $bayW - 4),
+                            $t,
+                            $internalDepth,
+                            $x + $bayW / 2,
+                            $band['y0'] + $secH * 0.55,
+                            $backT + $internalDepth / 2,
+                            'shelf',
+                            'SHELF'
+                        );
+                    } elseif ($style === 'long') {
+                        $rodPositions = [0.82];
+                        $makePanel(
+                            'Hanging Top Shelf',
+                            max(1, $bayW - 4),
+                            $t,
+                            $internalDepth,
+                            $x + $bayW / 2,
+                            $band['y0'] + $secH * 0.12,
+                            $backT + $internalDepth / 2,
+                            'shelf',
+                            'SHELF'
+                        );
+                    }
+                    foreach ($rodPositions as $rp) {
+                        $ry = $band['y0'] + $secH * $rp;
+                        // Cleat behind rod (thin board).
+                        $makePanel(
+                            'Hanging Cleat',
+                            max(1, $bayW - 4),
+                            80,
+                            $t,
+                            $x + $bayW / 2,
+                            $ry + 40,
+                            $backT + 20,
+                            'hanging',
+                            'HANGING_CLEAT'
+                        );
+                        // Rod as slender box along bay width.
+                        $meshes[] = $this->box(
+                            'Hanging Rod',
+                            max(1, $bayW - 16),
+                            25,
+                            25,
+                            $x + $bayW / 2,
+                            $ry,
+                            $backT + $internalDepth * 0.55,
+                            $interior ?: $exterior,
+                            'hanging',
+                            'HANGING_ROD',
+                            false,
+                            [
+                                'exterior' => $interior ?: $exterior,
+                                'interior' => $interior ?: $exterior,
+                                'expo_face_index' => null,
+                                'faces' => [],
+                            ]
+                        );
                     }
                 }
             }
@@ -599,6 +800,7 @@ final class FurnitureViewService
                     if ($type === 'DRAWERS') {
                         $flushDoor();
                         $count = max(1, (int) ($sec['drawer_count'] ?? 1));
+                        $isWicker = !empty($sec['wicker_basket']);
                         $eachH = $secH / $count;
                         for ($di = 0; $di < $count; $di++) {
                             $fh = max(1.0, $eachH - $drawerGap);
@@ -610,13 +812,13 @@ final class FurnitureViewService
                             }
                             $fw = max(1.0, $bayW - 2 * $frontInset);
                             $addFront(
-                                'Drawer Front ' . ($drawerRowIdx + 1),
+                                ($isWicker ? 'Wicker Front ' : 'Drawer Front ') . ($drawerRowIdx + 1),
                                 $fw,
                                 $fh,
                                 $bx + $bayW / 2,
                                 $fy,
-                                'drawer',
-                                'DRAWER_FRONT',
+                                $isWicker ? 'wicker' : 'drawer',
+                                $isWicker ? 'WICKER_FRONT' : 'DRAWER_FRONT',
                                 $dFinish
                             );
                             if ($di < $count - 1) {

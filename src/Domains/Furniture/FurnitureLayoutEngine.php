@@ -118,39 +118,143 @@ final class FurnitureLayoutEngine
                 $secPrefix = "{$bayLabel} - {$secLabel}";
                 if ($type === 'SHELVES') {
                     $count = max(0, (int) ($section['shelf_count'] ?? 1));
+                    $shelfStyle = strtolower((string) ($section['shelf_style'] ?? 'standard'));
+                    $isShoe = $shelfStyle === 'shoe';
+                    $isPlate = $shelfStyle === 'plate_tray' || $shelfStyle === 'plate';
+                    $isBottle = $shelfStyle === 'bottle';
                     if ($count > 0) {
+                        $role = 'SHELF';
+                        $vis = 'shelf';
+                        $label = 'Shelf';
+                        if ($isShoe) {
+                            $role = 'SHELF_SHOE';
+                            $vis = 'shoe';
+                            $label = 'Shoe Shelf';
+                        } elseif ($isPlate) {
+                            $role = 'SHELF_PLATE_TRAY';
+                            $vis = 'plate_tray';
+                            $label = 'Plate Tray';
+                        } elseif ($isBottle) {
+                            $role = 'SHELF_BOTTLE';
+                            $vis = 'bottle';
+                            $label = 'Bottle Rack Shelf';
+                        }
                         $logical[] = $this->panel(
-                            $this->partName($unit, "{$secPrefix} - Shelf"),
+                            $this->partName($unit, "{$secPrefix} - {$label}"),
                             max(1, $bayW - 2),
                             $internalDepth,
                             $t,
                             $count,
-                            'shelf',
-                            'SHELF'
+                            $vis,
+                            $role
                         );
+                        if ($isShoe) {
+                            $logical[] = $this->hardware(
+                                $this->partName($unit, "{$secPrefix} - Shoe Shelf Support"),
+                                $count * 4,
+                                'SHELF_PIN'
+                            );
+                        }
+                        if ($isPlate || $isBottle) {
+                            $logical[] = $this->hardware(
+                                $this->partName($unit, "{$secPrefix} - Pull-Out Slide"),
+                                $count * 2,
+                                'PULL_OUT_SLIDE'
+                            );
+                        }
+                        if ($isBottle) {
+                            $logical[] = $this->hardware(
+                                $this->partName($unit, "{$secPrefix} - Bottle Pull-Out Unit"),
+                                1,
+                                'BOTTLE_PULLOUT'
+                            );
+                        }
                     }
                 } elseif ($type === 'DRAWERS') {
                     $count = max(1, (int) ($section['drawer_count'] ?? 1));
                     $drawerH = (float) ($section['drawer_height_mm'] ?? 180);
                     $drawerW = max(1, $bayW - 20);
                     $drawerD = max(1, $d - 40);
-                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Front"), $drawerW, $drawerH, $t, $count, 'drawer', 'DRAWER_FRONT');
-                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Side"), $drawerD, $drawerH, $t, $count * 2, 'drawer', 'DRAWER_SIDE');
-                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Back"), $drawerW - (2 * $t), $drawerH, $t, $count, 'drawer', 'DRAWER_BACK');
-                    $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Bottom"), $drawerW - (2 * $t), $drawerD - $t, $backT, $count, 'drawer', 'DRAWER_BOTTOM');
-                    $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Drawer Slide"), $count * 2, 'DRAWER_SLIDE');
+                    $isWicker = !empty($section['wicker_basket']);
+                    if ($isWicker) {
+                        // Bought baskets: false front + runners + basket SKUs (no wood box).
+                        $logical[] = $this->panel(
+                            $this->partName($unit, "{$secPrefix} - Basket Front"),
+                            $drawerW,
+                            $drawerH,
+                            $t,
+                            $count,
+                            'wicker',
+                            'WICKER_FRONT'
+                        );
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Basket Slide"),
+                            $count * 2,
+                            'DRAWER_SLIDE'
+                        );
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Wicker Basket"),
+                            $count,
+                            'WICKER_BASKET'
+                        );
+                    } else {
+                        $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Front"), $drawerW, $drawerH, $t, $count, 'drawer', 'DRAWER_FRONT');
+                        $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Side"), $drawerD, $drawerH, $t, $count * 2, 'drawer', 'DRAWER_SIDE');
+                        $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Back"), $drawerW - (2 * $t), $drawerH, $t, $count, 'drawer', 'DRAWER_BACK');
+                        $logical[] = $this->panel($this->partName($unit, "{$secPrefix} - Drawer Bottom"), $drawerW - (2 * $t), $drawerD - $t, $backT, $count, 'drawer', 'DRAWER_BOTTOM');
+                        $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Drawer Slide"), $count * 2, 'DRAWER_SLIDE');
+                        if (!empty($section['cutlery_organizer'])) {
+                            $logical[] = $this->hardware(
+                                $this->partName($unit, "{$secPrefix} - Cutlery Organizer"),
+                                max(1, $count),
+                                'CUTLERY_ORGANIZER'
+                            );
+                        }
+                    }
                 } elseif ($type === 'HANGING') {
-                    // Rail/cleat board + hanging rod so the section appears on cutlist and hardware list
+                    $style = strtolower((string) ($section['hanging_style'] ?? 'standard'));
+                    if ($style === 'long') {
+                        $style = 'long';
+                    } elseif ($style === 'double' || $style === 'short') {
+                        $style = 'double';
+                    } else {
+                        $style = 'standard';
+                    }
+                    $rodCount = $style === 'double' ? 2 : 1;
+                    $cleatCount = $rodCount;
                     $logical[] = $this->panel(
                         $this->partName($unit, "{$secPrefix} - Rail Cleat"),
                         max(1, $bayW - 2),
                         80,
                         $t,
-                        1,
+                        $cleatCount,
                         'hanging',
                         'HANGING_CLEAT'
                     );
-                    $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Hanging Rod"), 1, 'HANGING_ROD');
+                    $logical[] = $this->hardware(
+                        $this->partName($unit, "{$secPrefix} - Hanging Rod"),
+                        $rodCount,
+                        'HANGING_ROD'
+                    );
+                    // Long hanging: top shelf above rod (FMOSV2 hanging_full top_shelf_count).
+                    // Double/short: mid shelf between rods.
+                    $extraShelves = 0;
+                    if ($style === 'long') {
+                        $extraShelves = max(0, (int) ($section['top_shelf_count'] ?? 1));
+                    } elseif ($style === 'double') {
+                        $extraShelves = 1;
+                    }
+                    if ($extraShelves > 0) {
+                        $logical[] = $this->panel(
+                            $this->partName($unit, "{$secPrefix} - Hanging Shelf"),
+                            max(1, $bayW - 2),
+                            $internalDepth,
+                            $t,
+                            $extraShelves,
+                            'shelf',
+                            'SHELF'
+                        );
+                    }
                 } elseif ($type === 'OPEN' || $type === 'MIRROR') {
                     $secH = max(1.0, (float) ($section['height_mm'] ?? 1));
                     $this->appendNicheLiners(
@@ -163,6 +267,43 @@ final class FurnitureLayoutEngine
                         $t,
                         $backT
                     );
+                    if (!empty($section['waste_bin'])) {
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Waste Bin"),
+                            1,
+                            'WASTE_BIN'
+                        );
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Waste Bin Slide"),
+                            2,
+                            'DRAWER_SLIDE'
+                        );
+                    }
+                    if (!empty($section['trouser_rack'])) {
+                        $arms = max(1, (int) ($section['arm_count'] ?? 9));
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Trouser Rack"),
+                            1,
+                            'TROUSER_RACK'
+                        );
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Trouser Rack Slide"),
+                            2,
+                            'DRAWER_SLIDE'
+                        );
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Trouser Arm"),
+                            $arms,
+                            'TROUSER_ARM'
+                        );
+                    }
+                    if (!empty($section['hob_bay'])) {
+                        $logical[] = $this->hardware(
+                            $this->partName($unit, "{$secPrefix} - Hob Clearance / Vent Note"),
+                            1,
+                            'HOB_CLEARANCE'
+                        );
+                    }
                     if ($type === 'MIRROR') {
                         $glass = FurnitureMirror::resolveGlass($section, $bayW, $secH);
                         $logical[] = $this->panel(

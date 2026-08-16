@@ -1,0 +1,265 @@
+{
+    "_meta": {
+        "source": "FMOSV2 frontend/data/sections.json (subset)",
+        "imported_at": "2026-08-16"
+    },
+    "sections": {
+        "hanging_full": {
+            "name": "Full Hanging Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 2100,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 450,
+                "max_width": 1200,
+                "rod_height_from_bottom": 1700,
+                "rod_diameter": 25,
+                "top_shelf_count": 1,
+                "hanging_clearance_min": 1400,
+                "load_capacity_kg_rod": 25,
+                "requires_back_panel": true
+            }
+        },
+        "hanging_double": {
+            "name": "Double Hanging Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 2100,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 450,
+                "max_width": 1200,
+                "upper_rod_height": 1900,
+                "lower_rod_height": 900,
+                "rod_diameter": 25,
+                "divider_shelf_height": 1050,
+                "hanging_clearance_min": 700,
+                "load_capacity_kg_per_rod": 20,
+                "requires_back_panel": true
+            }
+        },
+        "open_shelf": {
+            "name": "Open Shelf Section",
+            "default_dimensions": {
+                "width": 450,
+                "height": 720,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 250,
+                "max_width": 1200,
+                "shelf_count": 2,
+                "shelf_spacing_min": 200,
+                "shelf_spacing_max": 420,
+                "shelf_adjustable": true,
+                "shelf_pin_rows": 2,
+                "load_capacity_kg_per_shelf": 15,
+                "requires_back_panel": true
+            }
+        },
+        "drawer_stack": {
+            "name": "Drawer Stack Section",
+            "default_dimensions": {
+                "width": 450,
+                "height": 720,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 250,
+                "max_width": 900,
+                "drawer_count": 4,
+                "drawer_height_distribution": "equal",
+                "runner_type": "full_extension",
+                "runner_load_kg": 30,
+                "soft_close": true,
+                "front_gap": 3,
+                "requires_back_panel": true
+            }
+        },
+        "shoe_rack": {
+            "name": "Shoe Rack Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 600,
+                "depth": 350
+            },
+            "default_rules": {
+                "min_width": 400,
+                "max_width": 1200,
+                "tier_count": 3,
+                "tier_height": 180,
+                "shelf_angle_degrees": 15,
+                "pairs_per_tier": 3,
+                "requires_back_panel": false
+            }
+        },
+        "sink_bay": {
+            "name": "Sink Bay Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 720,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 450,
+                "max_width": 900,
+                "cutout_type": "top_mount",
+                "plumbing_access_rear": true,
+                "no_shelves": true,
+                "requires_back_panel": true,
+                "back_panel_cutout": {
+                    "width_ratio": 0.6,
+                    "height_ratio": 0.8
+                }
+            }
+        },
+        "pull_out": {
+            "name": "Pull-Out Section",
+            "default_dimensions": {
+                "width": 300,
+                "height": 1800,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 150,
+                "max_width": 500,
+                "tray_count": 5,
+                "tray_spacing_min": 200,
+                "runner_type": "full_extension",
+                "runner_load_kg": 40,
+                "soft_close": true,
+                "requires_back_panel": true
+            }
+        },
+        "trouser_pull_out": {
+            "name": "Trouser Pull-Out Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 600,
+                "depth": 500
+            },
+            "default_rules": {
+                "min_width": 500,
+                "max_width": 650,
+                "arm_count": 9,
+                "arm_spacing": 50,
+                "runner_type": "full_extension",
+                "soft_close": true,
+                "requires_back_panel": true
+            }
+        },
+        "open_niche": {
+            "name": "Open Niche Section",
+            "default_dimensions": {
+                "width": 450,
+                "height": 350,
+                "depth": 400
+            },
+            "default_rules": {
+                "min_width": 250,
+                "max_width": 1200,
+                "cable_routing": true,
+                "cable_grommet_position": "rear_center",
+                "requires_back_panel": true,
+                "back_panel_cutout": {
+                    "grommet_diameter": 60
+                }
+            }
+        },
+        "tandem_drawer": {
+            "name": "Tandem Drawer Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 250,
+                "depth": 500
+            },
+            "default_rules": {
+                "min_width": 450,
+                "max_width": 900,
+                "min_height": 180,
+                "max_height": 350,
+                "runner_type": "tandem_full_extension",
+                "load_capacity_kg": 50,
+                "soft_close": true,
+                "synchronized_pull": true,
+                "inner_drawer": false,
+                "requires_back_panel": true
+            }
+        },
+        "bottle_pullout": {
+            "name": "Bottle / Spice Pull-Out Rack Section",
+            "default_dimensions": {
+                "width": 150,
+                "height": 720,
+                "depth": 500
+            },
+            "default_rules": {
+                "min_width": 100,
+                "max_width": 250,
+                "rack_levels": 3,
+                "level_spacing_mm": 200,
+                "runner_type": "bottom_mount_full_extension",
+                "load_capacity_kg": 25,
+                "wire_basket": true,
+                "soft_close": true,
+                "requires_back_panel": false
+            }
+        },
+        "cutlery_organizer": {
+            "name": "Cutlery Organizer Drawer Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 120,
+                "depth": 500
+            },
+            "default_rules": {
+                "min_width": 400,
+                "max_width": 900,
+                "min_height": 80,
+                "max_height": 160,
+                "compartment_count": 6,
+                "insert_material": "plastic_moulded",
+                "runner_type": "undermount_soft_close",
+                "soft_close": true,
+                "requires_back_panel": true
+            }
+        },
+        "hob_bay": {
+            "name": "Hob / Cooktop Bay Section",
+            "default_dimensions": {
+                "width": 600,
+                "height": 720,
+                "depth": 560
+            },
+            "default_rules": {
+                "min_width": 550,
+                "max_width": 900,
+                "requires_countertop_host": true,
+                "heat_clearance_mm": 50,
+                "ventilation_gap_rear": 20,
+                "no_shelves": true,
+                "requires_back_panel": true
+            }
+        },
+        "wicker_basket": {
+            "name": "Wicker / Wire Basket Section",
+            "default_dimensions": {
+                "width": 500,
+                "height": 720,
+                "depth": 500
+            },
+            "default_rules": {
+                "min_width": 350,
+                "max_width": 900,
+                "basket_count": 3,
+                "basket_height": 200,
+                "runner_type": "side_mount",
+                "soft_close": true,
+                "requires_back_panel": true
+            }
+        }
+    }
+}

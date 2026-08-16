@@ -1,0 +1,293 @@
+{
+    "_meta": {
+        "source": "FMOSV2 frontend/data/moduleMappings.json",
+        "imported_at": "2026-08-16"
+    },
+    "module_mappings": {
+        "wardrobe": {
+            "label": "Wardrobe",
+            "default_dimensions": {
+                "width": 1800,
+                "height": 2400,
+                "depth": 600
+            },
+            "allowed_sections": {
+                "internal": [
+                    "hanging_full",
+                    "hanging_double",
+                    "open_shelf",
+                    "drawer_stack",
+                    "shoe_rack",
+                    "wicker_basket",
+                    "trouser_pull_out",
+                    "pigeon_hole",
+                    "walk_in_closet_zone",
+                    "accessory_drawer",
+                    "pull_down_hanger",
+                    "safe_locker",
+                    "ironing_board_pullout"
+                ],
+                "door": [
+                    "single_door",
+                    "double_door",
+                    "sliding_door",
+                    "mirror_door",
+                    "glass_door"
+                ]
+            }
+        },
+        "kitchen_base": {
+            "label": "Kitchen Base Cabinet",
+            "default_dimensions": {
+                "width": 900,
+                "height": 720,
+                "depth": 560
+            },
+            "allowed_sections": {
+                "internal": [
+                    "single_door",
+                    "double_door",
+                    "drawer_stack",
+                    "open_shelf",
+                    "sink_bay",
+                    "hob_bay",
+                    "appliance_bay",
+                    "corner_carousel",
+                    "pull_out",
+                    "wicker_basket",
+                    "tandem_drawer",
+                    "bottle_pullout",
+                    "cutlery_organizer",
+                    "appliance_garage"
+                ],
+                "door": []
+            }
+        },
+        "kitchen_wall": {
+            "label": "Kitchen Wall Cabinet",
+            "default_dimensions": {
+                "width": 900,
+                "height": 720,
+                "depth": 320
+            },
+            "allowed_sections": {
+                "internal": [
+                    "single_door",
+                    "double_door",
+                    "open_shelf",
+                    "glass_door",
+                    "flip_up",
+                    "pull_out",
+                    "appliance_garage"
+                ],
+                "door": []
+            }
+        },
+        "kitchen_tall": {
+            "label": "Kitchen Tall / Pantry Unit",
+            "default_dimensions": {
+                "width": 600,
+                "height": 2100,
+                "depth": 600
+            },
+            "allowed_sections": {
+                "internal": [
+                    "open_shelf",
+                    "drawer_stack",
+                    "single_door",
+                    "double_door",
+                    "pull_out",
+                    "appliance_bay",
+                    "tandem_drawer",
+                    "tall_pantry_pullout",
+                    "bottle_pullout"
+                ],
+                "door": []
+            }
+        },
+        "kitchen_corner": {
+            "label": "Kitchen Corner Cabinet",
+            "default_dimensions": {
+                "width": 900,
+                "height": 870,
+                "depth": 600
+            },
+            "allowed_sections": {
+                "internal": [
+                    "corner_carousel",
+                    "open_shelf",
+                    "single_door",
+                    "magic_corner"
+                ],
+                "door": []
+            }
+        },
+        "kitchen_corner_blind": {
+            "label": "Blind Corner Base Unit",
+            "default_dimensions": {
+                "width": 900,
+                "height": 720,
+                "depth": 600
+            },
+            "allowed_sections": {
+                "internal": [
+                    "single_door",
+                    "open_shelf",
+                    "pull_out"
+                ],
+                "door": []
+            }
+        },
+        "tv_unit": {
+            "label": "TV / Media Unit",
+            "default_dimensions": {
+                "width": 1800,
+                "height": 500,
+                "depth": 450
+            },
+            "allowed_sections": {
+                "internal": [
+                    "open_shelf",
+                    "single_door",
+                    "double_door",
+                    "drawer_stack",
+                    "glass_door",
+                    "open_niche",
+                    "flip_up",
+                    "media_bay"
+                ],
+                "door": []
+            }
+        },
+        "vanity_unit": {
+            "label": "Bathroom Vanity Unit",
+            "default_dimensions": {
+                "width": 900,
+                "height": 850,
+                "depth": 480
+            },
+            "allowed_sections": {
+                "internal": [
+                    "single_door",
+                    "double_door",
+                    "drawer_stack",
+                    "open_shelf",
+                    "sink_bay"
+                ],
+                "door": []
+            }
+        },
+        "bookshelf": {
+            "label": "Bookshelf / Open Rack",
+            "default_dimensions": {
+                "width": 800,
+                "height": 1800,
+                "depth": 300
+            },
+            "allowed_sections": {
+                "internal": [
+                    "open_shelf"
+                ],
+                "door": []
+            }
+        },
+        "crockery_unit": {
+            "label": "Crockery / China Cabinet",
+            "default_dimensions": {
+                "width": 1200,
+                "height": 2100,
+                "depth": 400
+            },
+            "allowed_sections": {
+                "internal": [
+                    "glass_door",
+                    "open_shelf",
+                    "drawer_stack",
+                    "single_door",
+                    "double_door"
+                ],
+                "door": []
+            }
+        },
+        "study_unit": {
+            "label": "Study / Desk Unit",
+            "default_dimensions": {
+                "width": 1400,
+                "height": 750,
+                "depth": 700
+            },
+            "allowed_sections": {
+                "internal": [
+                    "drawer_stack",
+                    "file_drawer",
+                    "open_shelf",
+                    "single_door",
+                    "open_niche",
+                    "foldable_wall_desk"
+                ],
+                "door": []
+            }
+        },
+        "shoe_cabinet": {
+            "label": "Shoe Cabinet",
+            "default_dimensions": {
+                "width": 800,
+                "height": 1200,
+                "depth": 400
+            },
+            "allowed_sections": {
+                "internal": [
+                    "shoe_rack",
+                    "flip_up",
+                    "single_door",
+                    "open_shelf"
+                ],
+                "door": []
+            }
+        },
+        "storage_unit": {
+            "label": "Generic Storage Unit",
+            "default_dimensions": {
+                "width": 900,
+                "height": 2100,
+                "depth": 450
+            },
+            "allowed_sections": {
+                "internal": [
+                    "open_shelf",
+                    "single_door",
+                    "double_door",
+                    "drawer_stack",
+                    "sliding_door",
+                    "glass_door",
+                    "flip_up",
+                    "pigeon_hole",
+                    "pull_out",
+                    "wicker_basket",
+                    "shoe_rack",
+                    "appliance_bay",
+                    "murphy_bed",
+                    "foldable_wall_desk",
+                    "sliding_partition_unit"
+                ],
+                "door": []
+            }
+        },
+        "office_desk": {
+            "label": "Office Desk with Pedestal",
+            "default_dimensions": {
+                "width": 1500,
+                "height": 750,
+                "depth": 600
+            },
+            "allowed_sections": {
+                "internal": [
+                    "open_shelf",
+                    "drawer_stack",
+                    "file_drawer"
+                ],
+                "door": []
+            }
+        }
+    }
+}

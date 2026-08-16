@@ -1,0 +1,283 @@
+{
+    "_meta": {
+        "source": "FMOSV2 frontend/data/WardrobePresets.json",
+        "imported_at": "2026-08-16"
+    },
+    "presets": [
+        {
+            "id": "preset_all_hanging",
+            "name": "All Hanging",
+            "description": "Full-height hanging rod system for jackets, coats, dresses",
+            "category": "formal",
+            "dimensions": {
+                "default_width_mm": 1800,
+                "height_adjustable": true
+            },
+            "tiers": [
+                {
+                    "tier_index": 0,
+                    "height_ratio": 1,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "hanging",
+                            "height_mm": 1600,
+                            "label": "Full Height Hanging"
+                        }
+                    ]
+                }
+            ],
+            "notes": "Best for formal wear storage"
+        },
+        {
+            "id": "preset_balanced_storage",
+            "name": "Balanced Mix (3-tier)",
+            "description": "Even split: hanging + shelves + drawers",
+            "category": "mixed",
+            "dimensions": {
+                "default_width_mm": 1800,
+                "height_adjustable": true
+            },
+            "tiers": [
+                {
+                    "tier_index": 0,
+                    "height_ratio": 0.35,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "hanging",
+                            "height_mm": 1000,
+                            "label": "Upper Hanging"
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 1,
+                    "height_ratio": 0.35,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "shelf",
+                            "height_mm": 300,
+                            "label": "Shelves",
+                            "compartments": {
+                                "subdivisions": [
+                                    {
+                                        "width_ratio": 0.5,
+                                        "divider_type": "adjustable"
+                                    },
+                                    {
+                                        "width_ratio": 0.5,
+                                        "divider_type": "adjustable"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 2,
+                    "height_ratio": 0.3,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "drawer",
+                            "height_mm": 200,
+                            "label": "Drawers",
+                            "drawer": {
+                                "depth_mm": 500,
+                                "rail_type": "undermount",
+                                "soft_close": true,
+                                "handle_type": "bar"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "notes": "Versatile for mixed clothing & accessories"
+        },
+        {
+            "id": "preset_compact_shelving",
+            "name": "Compact Shelving",
+            "description": "Tall compartmented shelves with internal dividers",
+            "category": "compact",
+            "dimensions": {
+                "default_width_mm": 1200,
+                "height_adjustable": true
+            },
+            "tiers": [
+                {
+                    "tier_index": 0,
+                    "height_ratio": 0.5,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "shelf",
+                            "height_mm": 600,
+                            "label": "Upper Shelf Bank",
+                            "compartments": {
+                                "subdivisions": [
+                                    {
+                                        "width_ratio": 0.33,
+                                        "divider_type": "fixed"
+                                    },
+                                    {
+                                        "width_ratio": 0.33,
+                                        "divider_type": "fixed"
+                                    },
+                                    {
+                                        "width_ratio": 0.34,
+                                        "divider_type": "fixed"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 1,
+                    "height_ratio": 0.5,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "shelf",
+                            "height_mm": 600,
+                            "label": "Lower Shelf Bank",
+                            "compartments": {
+                                "subdivisions": [
+                                    {
+                                        "width_ratio": 0.25,
+                                        "divider_type": "adjustable"
+                                    },
+                                    {
+                                        "width_ratio": 0.25,
+                                        "divider_type": "adjustable"
+                                    },
+                                    {
+                                        "width_ratio": 0.25,
+                                        "divider_type": "adjustable"
+                                    },
+                                    {
+                                        "width_ratio": 0.25,
+                                        "divider_type": "adjustable"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ],
+            "notes": "For shoes, folded items, accessories"
+        },
+        {
+            "id": "preset_max_drawers",
+            "name": "Maximum Drawers",
+            "description": "4-drawer system for deep storage",
+            "category": "drawers",
+            "dimensions": {
+                "default_width_mm": 1200,
+                "height_adjustable": true
+            },
+            "tiers": [
+                {
+                    "tier_index": 0,
+                    "height_ratio": 0.25,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "drawer",
+                            "height_mm": 150,
+                            "label": "Shallow Drawer",
+                            "drawer": {
+                                "depth_mm": 400,
+                                "rail_type": "side",
+                                "soft_close": true,
+                                "handle_type": "cup"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 1,
+                    "height_ratio": 0.25,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "drawer",
+                            "height_mm": 200,
+                            "label": "Standard Drawer 1",
+                            "drawer": {
+                                "depth_mm": 500,
+                                "rail_type": "undermount",
+                                "soft_close": true,
+                                "handle_type": "bar"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 2,
+                    "height_ratio": 0.25,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "drawer",
+                            "height_mm": 200,
+                            "label": "Standard Drawer 2",
+                            "drawer": {
+                                "depth_mm": 500,
+                                "rail_type": "undermount",
+                                "soft_close": true,
+                                "handle_type": "bar"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "tier_index": 3,
+                    "height_ratio": 0.25,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "drawer",
+                            "height_mm": 200,
+                            "label": "Deep Drawer",
+                            "drawer": {
+                                "depth_mm": 600,
+                                "rail_type": "undermount",
+                                "soft_close": true,
+                                "handle_type": "bar"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "notes": "For bulk clothing storage"
+        },
+        {
+            "id": "preset_loft_storage",
+            "name": "Loft Box Storage",
+            "description": "High-capacity loft sections with dividers",
+            "category": "loft",
+            "dimensions": {
+                "default_width_mm": 1800,
+                "height_adjustable": true
+            },
+            "tiers": [
+                {
+                    "tier_index": 0,
+                    "height_ratio": 1,
+                    "sections": [
+                        {
+                            "width_ratio": 1,
+                            "section_type": "loft",
+                            "height_mm": 800,
+                            "label": "Loft Storage"
+                        }
+                    ]
+                }
+            ],
+            "notes": "For blankets, pillows, out-of-season clothing"
+        }
+    ]
+}

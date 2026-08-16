@@ -6,6 +6,7 @@ namespace Fmos\Domains\Furniture;
 
 use Fmos\Core\Audit;
 use Fmos\Core\Database;
+use Fmos\Domains\Catalog\HardwareSkuCatalog;
 
 final class FurnitureEngine
 {
@@ -787,12 +788,22 @@ final class FurnitureEngine
             if ($role === 'BACK_PANEL' && !empty($c['back_material_id'])) {
                 $mfg['back_material_id'] = (int) $c['back_material_id'];
             }
+            $compType = (string) ($c['type'] ?? 'PANEL');
+            if ($compType === 'HARDWARE' && $role !== '') {
+                $resolved = HardwareSkuCatalog::resolveFromComponent($tenantId, [
+                    'role' => $role,
+                    'manufacturing_data' => ['role' => $role],
+                ]);
+                $mfg['sku'] = $resolved['sku'];
+                $mfg['catalog_product_id'] = $resolved['catalog_product_id'];
+                $mfg['hardware_uom'] = $resolved['uom'];
+            }
             $insert->execute([
                 $tenantId,
                 $furnitureId,
                 $key,
                 (string) $c['name'],
-                (string) ($c['type'] ?? 'PANEL'),
+                $compType,
                 $idx,
                 (int) ($c['qty'] ?? 1),
                 (float) ($c['length_mm'] ?? 0),

@@ -8,6 +8,7 @@ use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
 use Fmos\Domains\Catalog\CatalogService;
+use Fmos\Domains\Catalog\HardwareSkuCatalog;
 use Fmos\Domains\Catalog\MaterialService;
 use Fmos\Domains\Furniture\FurnitureEngine;
 use Fmos\Domains\Furniture\FurnitureExpo;
@@ -362,7 +363,8 @@ final class ManufacturingService
 
         $panels = $pdo->prepare('SELECT * FROM panels WHERE manufacturing_package_id=?');
         $panels->execute([$pkgId]);
-        foreach ($panels->fetchAll() as $p) {
+        $panelRows = $panels->fetchAll();
+        foreach ($panelRows as $p) {
             $areaMm2 = ((float) $p['finishing_length_mm'] * (float) $p['finishing_width_mm'] * (float) $p['quantity']);
             $areaSqFt = $areaMm2 / 92903.04;
             $unit = (float) ($boardProduct['cost'] ?? 45);
@@ -375,9 +377,41 @@ final class ManufacturingService
                 continue;
             }
             $qty = (float) $c['quantity'];
-            $unit = 35.0;
-            $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$bomRevId, 'HARDWARE', $c['name'], $qty, 'PCS', $unit, $qty * $unit, $c['component_key']]);
+            $resolved = HardwareSkuCatalog::resolveFromComponent($tenantId, $c);
+            $unit = $resolved['unit_cost'];
+            $desc = $resolved['name'] !== '' ? $resolved['name'] : (string) $c['name'];
+            if ($resolved['sku'] !== '') {
+                $desc = $resolved['sku'] . ' — ' . $desc;
+            }
+            $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $bomRevId,
+                'HARDWARE',
+                $resolved['catalog_product_id'],
+                $desc,
+                $qty,
+                $resolved['uom'],
+                $unit,
+                $qty * $unit,
+                $c['component_key'] ?? $resolved['sku'],
+            ]);
+        }
+
+        $edgeAgg = EdgeBandBom::aggregateFromPanels($tenantId, $panelRows);
+        if ($edgeAgg['meters'] > 0) {
+            $total = $edgeAgg['meters'] * $edgeAgg['unit_cost'];
+            $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $bomRevId,
+                'EDGE_BAND',
+                $edgeAgg['catalog_product_id'],
+                $edgeAgg['sku'] . ' — ' . $edgeAgg['name'] . ' (' . $edgeAgg['panel_count'] . ' panels)',
+                $edgeAgg['meters'],
+                $edgeAgg['uom'],
+                $edgeAgg['unit_cost'],
+                round($total, 4),
+                'EDGE-TOTAL',
+            ]);
         }
         return $bomRevId;
     }
@@ -417,6 +451,10 @@ final class ManufacturingService
                 }
                 $hardware[] = [
                     'description' => $c['name'],
+                    'sku' => $c['manufacturing_data']['sku'] ?? HardwareSkuCatalog::skuForRole(
+                        (string) ($c['manufacturing_data']['role'] ?? $c['geometry']['role'] ?? 'HARDWARE')
+                    ),
+                    'catalog_product_id' => $c['manufacturing_data']['catalog_product_id'] ?? null,
                     'quantity' => $c['quantity'],
                     'material_name' => 'Hardware',
                     'note' => $c['component_key'] ?? null,

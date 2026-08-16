@@ -7,7 +7,9 @@ namespace Fmos\Domains\Pricing;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Domains\Catalog\HardwareSkuCatalog;
 use Fmos\Domains\Furniture\FurnitureEngine;
+use Fmos\Domains\Manufacturing\EdgeBandBom;
 
 final class CommercialService
 {
@@ -124,11 +126,23 @@ final class CommercialService
         foreach ($furniture['components'] as $c) {
             if (($c['type'] ?? '') === 'HARDWARE') {
                 $qty = (float) $c['qty'];
-                $unit = 35.0;
+                $resolved = HardwareSkuCatalog::resolveFromComponent($tenantId, $c);
+                $unit = $resolved['unit_cost'];
                 $total = $qty * $unit;
                 $costTotal += $total;
-                $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$bomRevId, 'HARDWARE', $c['name'], $qty, 'PCS', $unit, $total, $c['name']]);
+                $desc = $resolved['sku'] . ' — ' . $resolved['name'];
+                $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([
+                    $bomRevId,
+                    'HARDWARE',
+                    $resolved['catalog_product_id'],
+                    $desc,
+                    $qty,
+                    $resolved['uom'],
+                    $unit,
+                    $total,
+                    $c['name'] ?? $resolved['sku'],
+                ]);
                 continue;
             }
             $areaMm2 = ((float) $c['length_mm'] * (float) $c['width_mm'] * (float) $c['qty']);
@@ -138,6 +152,25 @@ final class CommercialService
             $costTotal += $total;
             $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([$bomRevId, 'BOARD', $boardProduct['id'], $c['name'], round($areaSqFt, 4), 'SQ_FT', $unit, round($total, 4), $c['name']]);
+        }
+
+        $edgeRule = ['edge_1' => 0.8, 'edge_2' => 0.8, 'edge_3' => 0.8, 'edge_4' => 0.8, 'apply_to_thickness_gte_mm' => 12];
+        $edgeAgg = EdgeBandBom::aggregateFromComponents($tenantId, $furniture['components'] ?? [], $edgeRule);
+        if ($edgeAgg['meters'] > 0) {
+            $total = $edgeAgg['meters'] * $edgeAgg['unit_cost'];
+            $costTotal += $total;
+            $stmt = $pdo->prepare('INSERT INTO bom_items (bom_revision_id, item_type, catalog_product_id, description, quantity, uom, unit_cost, total_cost, source_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $bomRevId,
+                'EDGE_BAND',
+                $edgeAgg['catalog_product_id'],
+                $edgeAgg['sku'] . ' — ' . $edgeAgg['name'],
+                $edgeAgg['meters'],
+                $edgeAgg['uom'],
+                $edgeAgg['unit_cost'],
+                round($total, 4),
+                'EDGE-TOTAL',
+            ]);
         }
 
         $boqNumber = 'BOQ-' . $projectId . '-' . $furnitureId . '-' . time();
