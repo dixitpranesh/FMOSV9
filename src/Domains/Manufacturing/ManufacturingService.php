@@ -7,6 +7,7 @@ namespace Fmos\Domains\Manufacturing;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 use Fmos\Domains\Catalog\CatalogService;
 use Fmos\Domains\Catalog\HardwareSkuCatalog;
 use Fmos\Domains\Catalog\MaterialService;
@@ -115,6 +116,7 @@ final class ManufacturingService
         if ($furnitureIds === []) {
             throw new \RuntimeException('furniture_ids required');
         }
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
         $pdo = Database::connection();
         $pdo->beginTransaction();
         try {
@@ -126,6 +128,7 @@ final class ManufacturingService
             $allIssues = [];
             foreach ($furnitureIds as $fid) {
                 $fid = (int) $fid;
+                TenantGuard::assertOwned('furniture_instances', $fid, $tenantId, 'project_id = ?', [$projectId]);
                 $pkg = $this->validateAndGenerate($tenantId, $projectId, $fid, $jobId);
                 $pdo->prepare('INSERT INTO manufacturing_job_furniture (manufacturing_job_id, furniture_id, manufacturing_package_id, validation_json, status) VALUES (?, ?, ?, ?, ?)')
                     ->execute([
@@ -159,6 +162,8 @@ final class ManufacturingService
 
     public function validateAndGenerate(int $tenantId, int $projectId, int $furnitureId, ?int $jobId = null): array
     {
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
+        TenantGuard::assertOwned('furniture_instances', $furnitureId, $tenantId, 'project_id = ?', [$projectId]);
         $validation = $this->validateFurniture($tenantId, $furnitureId);
         $furniture = $validation['furniture'];
         $issues = $validation['issues'];

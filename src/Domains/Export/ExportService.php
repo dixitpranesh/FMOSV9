@@ -95,7 +95,7 @@ final class ExportService
         }
         // UTF-8 BOM so Excel shows labels correctly
         $csv = "\xEF\xBB\xBF" . implode("\n", $lines);
-        $dir = dirname(__DIR__, 3) . '/storage/exports';
+        $dir = dirname(__DIR__, 3) . '/storage/tenants/' . $tenantId . '/exports';
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -106,7 +106,7 @@ final class ExportService
         Audit::record('EXPORT', 'cutlist_csv', $packageIds[0], null, ['file' => $file, 'package_ids' => $packageIds, 'furniture' => $codes]);
         return [
             'filename' => $file,
-            'path' => 'storage/exports/' . $file,
+            'path' => 'storage/tenants/' . $tenantId . '/exports/' . $file,
             'mime' => 'text/csv',
             'content' => $csv,
             'package_ids' => $packageIds,
@@ -243,14 +243,14 @@ final class ExportService
         }
         $html .= '</g></svg></body></html>';
 
-        $dir = dirname(__DIR__, 3) . '/storage/exports';
+        $dir = dirname(__DIR__, 3) . '/storage/tenants/' . $tenantId . '/exports';
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
         $name = 'design-f' . $furnitureId . '-' . strtolower($view) . '-' . time() . '.html';
         file_put_contents($dir . '/' . $name, $html);
         Audit::record('EXPORT', 'design_html', $furnitureId, null, ['file' => $name]);
-        return ['filename' => $name, 'path' => 'storage/exports/' . $name, 'mime' => 'text/html', 'content' => $html];
+        return ['filename' => $name, 'path' => 'storage/tenants/' . $tenantId . '/exports/' . $name, 'mime' => 'text/html', 'content' => $html];
     }
 
     private function csv(string $v): string

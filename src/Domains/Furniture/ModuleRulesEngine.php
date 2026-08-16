@@ -35,6 +35,8 @@ final class ModuleRulesEngine
         $w = (float) ($dims['width'] ?? 0);
         $h = (float) ($dims['height'] ?? 0);
         $d = (float) ($dims['depth'] ?? 0);
+        $bayWidths = $this->resolveBayWidths($layout, $w);
+        $recommendWidths = $this->candidateBayWidthsForRecommend($layout, $w);
 
         $recommended = [];
         $optional = [];
@@ -47,7 +49,7 @@ final class ModuleRulesEngine
             if ($cfg === null) {
                 continue;
             }
-            $entry = $this->enrichConfigEntry($cfg, $module, $w, $h, $d, $present, $layout);
+            $entry = $this->enrichConfigEntry($cfg, $module, $w, $h, $d, $recommendWidths, $present, $layout);
             if ($entry['status'] === 'unavailable') {
                 $unavailable[] = $entry;
                 continue;
@@ -104,7 +106,9 @@ final class ModuleRulesEngine
             if ($cfg === null) {
                 continue;
             }
-            $elig = $this->eligibilityFailure($cfg, $w, $h, $d);
+            // FMOSV2 max/min width rules are bay/section spans, not carcass overall width.
+            $widthsForCfg = $this->bayWidthsForPresentConfig($layout, $cfgId, $w);
+            $elig = $this->eligibilityFailure($cfg, $w, $h, $d, $widthsForCfg, true);
             if ($elig !== null) {
                 $issues[] = [
                     'code' => 'DIMENSION',
@@ -368,6 +372,7 @@ final class ModuleRulesEngine
     /**
      * @param array<string,mixed> $cfg
      * @param array<string,mixed> $module
+     * @param list<float> $bayWidths
      * @param list<string> $present
      * @param array<string,mixed> $layout
      * @return array<string,mixed>
@@ -378,6 +383,7 @@ final class ModuleRulesEngine
         float $w,
         float $h,
         float $d,
+        array $bayWidths,
         array $present,
         array $layout
     ): array {
@@ -390,7 +396,8 @@ final class ModuleRulesEngine
             $reasons[] = (string) ($cfg['unavailable_reason'] ?? 'Not implemented yet.');
         }
 
-        $elig = $this->eligibilityFailure($cfg, $w, $h, $d);
+        // Recommend: available if any bay can host the config (width is bay-scoped).
+        $elig = $this->eligibilityFailure($cfg, $w, $h, $d, $bayWidths, false);
         if ($elig !== null) {
             $status = 'unavailable';
             $reasons[] = $elig;
@@ -472,25 +479,94 @@ final class ModuleRulesEngine
     }
 
     /** @param array<string,mixed> $cfg */
-    private function eligibilityFailure(array $cfg, float $w, float $h, float $d): ?string
-    {
+    private function eligibilityFailure(
+        array $cfg,
+        float $moduleW,
+        float $h,
+        float $d,
+        array $bayWidths = [],
+        bool $requireAllBays = false
+    ): ?string {
         $e = $cfg['eligibility'] ?? [];
-        if ($w > 0 && isset($e['min_width_mm']) && $w < (float) $e['min_width_mm']) {
-            return sprintf(
-                'Requires width ≥ %s mm (module is %s mm). [%s]',
-                (int) $e['min_width_mm'],
-                (int) $w,
-                $e['rule_source'] ?? 'rule'
-            );
+        $widths = $bayWidths !== [] ? $bayWidths : ($moduleW > 0 ? [$moduleW] : []);
+        $minW = isset($e['min_width_mm']) ? (float) $e['min_width_mm'] : null;
+        $maxW = isset($e['max_width_mm']) ? (float) $e['max_width_mm'] : null;
+
+        if ($widths !== [] && ($minW !== null || $maxW !== null)) {
+            $fit = static function (float $bw) use ($minW, $maxW): bool {
+                if ($minW !== null && $bw < $minW) {
+                    return false;
+                }
+                if ($maxW !== null && $bw > $maxW) {
+                    return false;
+                }
+                return true;
+            };
+
+            if ($requireAllBays) {
+                foreach ($widths as $bw) {
+                    if (!$fit((float) $bw)) {
+                        $src = $e['rule_source'] ?? 'rule';
+                        if ($maxW !== null && (float) $bw > $maxW) {
+                            return sprintf(
+                                'Requires bay width ≤ %s mm (bay is %s mm; module %s mm). [%s]',
+                                (int) $maxW,
+                                (int) $bw,
+                                (int) $moduleW,
+                                $src
+                            );
+                        }
+                        return sprintf(
+                            'Requires bay width ≥ %s mm (bay is %s mm; module %s mm). [%s]',
+                            (int) ($minW ?? 0),
+                            (int) $bw,
+                            (int) $moduleW,
+                            $src
+                        );
+                    }
+                }
+            } else {
+                $anyFit = false;
+                foreach ($widths as $bw) {
+                    if ($fit((float) $bw)) {
+                        $anyFit = true;
+                        break;
+                    }
+                }
+                if (!$anyFit) {
+                    $src = $e['rule_source'] ?? 'rule';
+                    $widest = max($widths);
+                    $narrowest = min($widths);
+                    if ($maxW !== null && $narrowest > $maxW) {
+                        return sprintf(
+                            'Requires bay width ≤ %s mm (narrowest bay is %s mm; module %s mm). [%s]',
+                            (int) $maxW,
+                            (int) $narrowest,
+                            (int) $moduleW,
+                            $src
+                        );
+                    }
+                    if ($minW !== null && $widest < $minW) {
+                        return sprintf(
+                            'Requires bay width ≥ %s mm (widest bay is %s mm; module %s mm). [%s]',
+                            (int) $minW,
+                            (int) $widest,
+                            (int) $moduleW,
+                            $src
+                        );
+                    }
+                    return sprintf(
+                        'No bay fits width band %s–%s mm (bays %s mm; module %s mm). [%s]',
+                        $minW !== null ? (int) $minW : '…',
+                        $maxW !== null ? (int) $maxW : '…',
+                        implode('/', array_map(static fn ($x) => (string) (int) $x, $widths)),
+                        (int) $moduleW,
+                        $src
+                    );
+                }
+            }
         }
-        if ($w > 0 && isset($e['max_width_mm']) && $w > (float) $e['max_width_mm']) {
-            return sprintf(
-                'Requires width ≤ %s mm (module is %s mm). [%s]',
-                (int) $e['max_width_mm'],
-                (int) $w,
-                $e['rule_source'] ?? 'rule'
-            );
-        }
+
         if ($h > 0 && isset($e['min_height_mm']) && $h < (float) $e['min_height_mm']) {
             return sprintf(
                 'Requires height ≥ %s mm (module is %s mm). [%s]',
@@ -508,5 +584,102 @@ final class ModuleRulesEngine
             );
         }
         return null;
+    }
+
+    /**
+     * Equal-share bay widths (same convention as LayoutEngine), using carcass outer width.
+     *
+     * @param array<string,mixed> $layout
+     * @return list<float>
+     */
+    private function resolveBayWidths(array $layout, float $moduleW): array
+    {
+        $bays = array_values($layout['bays'] ?? []);
+        if ($moduleW <= 0) {
+            return [];
+        }
+        if ($bays === []) {
+            return [$moduleW];
+        }
+        $partT = (float) ($layout['partition_thickness_mm'] ?? 18);
+        $carcassT = 18.0; // eligibility uses outer module W; internal clear ≈ W − 2×carcass
+        $internalW = max(1.0, $moduleW - (2 * $carcassT));
+        $n = count($bays);
+        $fixed = 0.0;
+        $flex = 0;
+        $widths = array_fill(0, $n, 0.0);
+        foreach ($bays as $i => $bay) {
+            if (!empty($bay['width_mm']) && (float) $bay['width_mm'] > 0) {
+                $widths[$i] = (float) $bay['width_mm'];
+                $fixed += $widths[$i];
+            } else {
+                $flex++;
+            }
+        }
+        $available = max(1.0, $internalW - ($partT * max(0, $n - 1)));
+        $remain = max(1.0, $available - $fixed);
+        $each = $flex > 0 ? $remain / $flex : 0.0;
+        foreach ($widths as $i => $bw) {
+            if ($bw <= 0) {
+                $widths[$i] = $each > 0 ? $each : $available / max(1, $n);
+            }
+        }
+        return array_map(static fn ($x) => round((float) $x, 2), $widths);
+    }
+
+    /**
+     * For recommendations, also consider equal 2–4 bay splits so wide carcasses
+     * can still host narrow section types (drawers ≤900, bottle ≤300, etc.).
+     *
+     * @param array<string,mixed> $layout
+     * @return list<float>
+     */
+    private function candidateBayWidthsForRecommend(array $layout, float $moduleW): array
+    {
+        $actual = $this->resolveBayWidths($layout, $moduleW);
+        if ($moduleW <= 0) {
+            return $actual;
+        }
+        $candidates = $actual;
+        $internalW = max(1.0, $moduleW - 36.0);
+        $partT = (float) ($layout['partition_thickness_mm'] ?? 18);
+        foreach ([2, 3, 4] as $n) {
+            $candidates[] = ($internalW - ($partT * ($n - 1))) / $n;
+        }
+        $out = [];
+        foreach ($candidates as $w) {
+            $w = round((float) $w, 2);
+            if ($w > 0) {
+                $out[(string) $w] = $w;
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
+     * Bay widths that currently host a present config (for validation).
+     *
+     * @param array<string,mixed> $layout
+     * @return list<float>
+     */
+    private function bayWidthsForPresentConfig(array $layout, string $configId, float $moduleW): array
+    {
+        $all = $this->resolveBayWidths($layout, $moduleW);
+        $bays = array_values($layout['bays'] ?? []);
+        if ($bays === [] || $all === []) {
+            return $all !== [] ? $all : ($moduleW > 0 ? [$moduleW] : []);
+        }
+
+        $matched = [];
+        foreach ($bays as $i => $bay) {
+            $presentInBay = $this->detectPresentConfigIds([
+                'door_type' => $layout['door_type'] ?? null,
+                'bays' => [$bay],
+            ]);
+            if (in_array($configId, $presentInBay, true)) {
+                $matched[] = $all[$i] ?? $moduleW;
+            }
+        }
+        return $matched !== [] ? $matched : $all;
     }
 }

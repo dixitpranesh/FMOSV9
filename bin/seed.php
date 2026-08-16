@@ -23,14 +23,14 @@ if ($exists->fetch()) {
 
 // Platform super admin
 $hash = password_hash('Password123!', PASSWORD_DEFAULT);
-$stmt = $pdo->prepare('INSERT INTO users (tenant_id, email, name, password_hash, is_platform_user, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, 1, ?, NOW(), NOW())');
+$stmt = $pdo->prepare('INSERT INTO users (tenant_id, email, name, password_hash, is_platform_user, status, email_verified_at, created_at, updated_at) VALUES (NULL, ?, ?, ?, 1, ?, NOW(), NOW(), NOW())');
 $stmt->execute(['platform@fmos.local', 'Platform Super Admin', $hash, 'ACTIVE']);
 $platformId = (int) $pdo->lastInsertId();
 $roleId = (int) $pdo->query("SELECT id FROM roles WHERE code = 'PLATFORM_SUPER_ADMIN'")->fetchColumn();
 $pdo->prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)')->execute([$platformId, $roleId]);
 
 $supportHash = password_hash('Password123!', PASSWORD_DEFAULT);
-$stmt = $pdo->prepare('INSERT INTO users (tenant_id, email, name, password_hash, is_platform_user, status, created_at, updated_at) VALUES (NULL, ?, ?, ?, 1, ?, NOW(), NOW())');
+$stmt = $pdo->prepare('INSERT INTO users (tenant_id, email, name, password_hash, is_platform_user, status, email_verified_at, created_at, updated_at) VALUES (NULL, ?, ?, ?, 1, ?, NOW(), NOW(), NOW())');
 $stmt->execute(['support@fmos.local', 'Support Admin', $supportHash, 'ACTIVE']);
 $supportId = (int) $pdo->lastInsertId();
 $supportRole = (int) $pdo->query("SELECT id FROM roles WHERE code = 'SUPPORT'")->fetchColumn();

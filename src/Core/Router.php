@@ -46,6 +46,8 @@ final class Router
 
     public function dispatch(Request $request): void
     {
+        Security::applyHeaders();
+
         foreach ($this->routes as $route) {
             if ($route['method'] !== $request->method) {
                 continue;
@@ -55,11 +57,27 @@ final class Router
                 continue;
             }
 
+            if (in_array($request->method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+                Security::assertTrustedOrigin($request);
+            }
+
             if ($route['auth']) {
                 $user = Auth::user();
                 if ($user === null) {
                     Response::error('AUTH_REQUIRED', 'Authentication required', 401);
                     return;
+                }
+                // CSRF required for any browser session on mutating methods,
+                // including when Authorization Bearer is also sent (SPA pattern).
+                if (in_array($request->method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+                    $hasSessionUser = !empty($_SESSION['user_id'] ?? null);
+                    if ($hasSessionUser) {
+                        $csrfHeader = $request->header('X-CSRF-Token') ?? $request->input('_csrf');
+                        if (!Auth::validateCsrf(is_string($csrfHeader) ? $csrfHeader : null)) {
+                            Response::error('CSRF_INVALID', 'Invalid CSRF token.', 419);
+                            return;
+                        }
+                    }
                 }
             }
 

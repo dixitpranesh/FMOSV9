@@ -7,6 +7,7 @@ namespace Fmos\Domains\Project;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 
 final class ProjectService
 {
@@ -51,6 +52,8 @@ final class ProjectService
     public function createProject(int $tenantId, array $data): array
     {
         $pdo = Database::connection();
+        TenantGuard::assertOwned('organizations', (int) $data['organization_id'], $tenantId);
+        TenantGuard::assertOwned('clients', (int) $data['client_id'], $tenantId);
         $stmt = $pdo->prepare('INSERT INTO projects (tenant_id, organization_id, client_id, name, project_type, status, workflow_stage, model_mode, version, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())');
         $stmt->execute([
             $tenantId,
@@ -80,7 +83,11 @@ final class ProjectService
         $stmt = $pdo->prepare('INSERT INTO project_revisions (tenant_id, project_id, revision_number, label, created_by, created_at) VALUES (?, ?, 1, ?, ?, NOW())');
         $stmt->execute([$tenantId, $projectId, 'Initial', Auth::id()]);
 
-        Audit::record('CREATE', 'project', $projectId, null, $data);
+        Audit::record('CREATE', 'project', $projectId, null, [
+            'name' => $data['name'] ?? null,
+            'organization_id' => (int) $data['organization_id'],
+            'client_id' => (int) $data['client_id'],
+        ]);
         return $this->getProject($tenantId, $projectId);
     }
 
@@ -102,16 +109,16 @@ final class ProjectService
             throw new \RuntimeException('Project not found');
         }
 
-        $stmt = $pdo->prepare('SELECT * FROM buildings WHERE project_id = ?');
-        $stmt->execute([$id]);
+        $stmt = $pdo->prepare('SELECT * FROM buildings WHERE project_id = ? AND tenant_id = ?');
+        $stmt->execute([$id, $tenantId]);
         $buildings = $stmt->fetchAll();
         foreach ($buildings as &$b) {
-            $stmt = $pdo->prepare('SELECT * FROM floors WHERE building_id = ?');
-            $stmt->execute([(int) $b['id']]);
+            $stmt = $pdo->prepare('SELECT * FROM floors WHERE building_id = ? AND tenant_id = ?');
+            $stmt->execute([(int) $b['id'], $tenantId]);
             $floors = $stmt->fetchAll();
             foreach ($floors as &$f) {
-                $stmt = $pdo->prepare('SELECT * FROM rooms WHERE floor_id = ?');
-                $stmt->execute([(int) $f['id']]);
+                $stmt = $pdo->prepare('SELECT * FROM rooms WHERE floor_id = ? AND tenant_id = ?');
+                $stmt->execute([(int) $f['id'], $tenantId]);
                 $f['rooms'] = $stmt->fetchAll();
             }
             $b['floors'] = $floors;

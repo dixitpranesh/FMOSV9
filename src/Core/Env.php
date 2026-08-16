@@ -46,6 +46,13 @@ final class Env
         return self::$vars[$key] ?? $_ENV[$key] ?? getenv($key) ?: $default;
     }
 
+    public static function set(string $key, string $value): void
+    {
+        self::$vars[$key] = $value;
+        $_ENV[$key] = $value;
+        putenv("{$key}={$value}");
+    }
+
     public static function bool(string $key, bool $default = false): bool
     {
         $value = self::get($key);

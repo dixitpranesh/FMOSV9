@@ -143,4 +143,48 @@ $valid = $engine->validate('KITCHEN_BASE', ['width' => 600, 'height' => 720, 'de
 assertTrue($valid['ok'] === false, 'plumbing+shelves fails validation');
 assertTrue(count($valid['issues']) >= 1, 'validation reports issues');
 
+// Bay-scoped width: 1200 carcass with 2 bays should allow drawers (≤900 section rule).
+$twoBayLayout = [
+    'door_type' => 'HINGED',
+    'partition_thickness_mm' => 18,
+    'bays' => [
+        ['id' => 'bay-1', 'label' => 'Left', 'width_mm' => null, 'sections' => [
+            ['type' => 'DRAWERS', 'drawer_count' => 3, 'height_mm' => 600, 'label' => 'Drawers'],
+        ]],
+        ['id' => 'bay-2', 'label' => 'Right', 'width_mm' => null, 'sections' => [
+            ['type' => 'HANGING', 'height_mm' => 1100, 'label' => 'Hang'],
+        ]],
+    ],
+];
+$wideOk = $engine->validate('WARDROBE', ['width' => 1200, 'height' => 2400, 'depth' => 600], $twoBayLayout);
+$dimMsgs = array_values(array_filter(
+    $wideOk['issues'],
+    static fn ($i) => ($i['code'] ?? '') === 'DIMENSION' && str_contains((string) ($i['message'] ?? ''), '≤')
+));
+assertTrue($dimMsgs === [], '1200 module with 2 bays does not fail drawer max-width');
+
+$wideRec = $engine->recommend('WARDROBE', ['width' => 1200, 'height' => 2400, 'depth' => 600], [
+    'bays' => [['id' => 'bay-1', 'sections' => []]],
+]);
+$drawerAvail = null;
+foreach (array_merge($wideRec['recommended'], $wideRec['optional']) as $row) {
+    if ($row['id'] === 'CFG_DRAWERS') {
+        $drawerAvail = $row;
+        break;
+    }
+}
+assertTrue($drawerAvail !== null && ($drawerAvail['status'] ?? '') === 'available', 'drawers recommendable on 1200 via bay split');
+
+$singleWideDrawers = $engine->validate('WARDROBE', ['width' => 1200, 'height' => 2400, 'depth' => 600], [
+    'door_type' => 'NONE',
+    'bays' => [['id' => 'bay-1', 'width_mm' => null, 'sections' => [
+        ['type' => 'DRAWERS', 'drawer_count' => 3, 'height_mm' => 600],
+    ]]],
+]);
+assertTrue($singleWideDrawers['ok'] === false, 'single 1200 bay drawers still flagged');
+assertTrue(
+    count(array_filter($singleWideDrawers['issues'], static fn ($i) => str_contains((string) ($i['message'] ?? ''), 'bay width'))) >= 1,
+    'message refers to bay width'
+);
+
 echo "Module configuration unit tests done\n";

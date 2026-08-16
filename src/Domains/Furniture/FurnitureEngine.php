@@ -6,6 +6,7 @@ namespace Fmos\Domains\Furniture;
 
 use Fmos\Core\Audit;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 use Fmos\Domains\Catalog\HardwareSkuCatalog;
 
 final class FurnitureEngine
@@ -46,7 +47,7 @@ final class FurnitureEngine
     {
         $this->ensureTemplates();
         $pdo = Database::connection();
-        $rows = $pdo->query("SELECT id, code, name, category, version, parameters_json, rules_json FROM furniture_templates WHERE status='PUBLISHED' ORDER BY category, name")->fetchAll();
+        $rows = $pdo->query("SELECT id, code, name, category, version, parameters_json, rules_json FROM furniture_templates WHERE status='PUBLISHED' AND tenant_id IS NULL ORDER BY category, name")->fetchAll();
         return array_map(static function (array $row): array {
             $row['parameters'] = json_decode($row['parameters_json'] ?? '{}', true) ?: [];
             $row['rules'] = json_decode($row['rules_json'] ?? '{}', true) ?: [];
@@ -76,6 +77,11 @@ final class FurnitureEngine
         $roomId = array_key_exists('room_id', $data) && $data['room_id'] !== null && $data['room_id'] !== ''
             ? (int) $data['room_id']
             : null;
+
+        TenantGuard::assertOwned('projects', (int) $data['project_id'], $tenantId);
+        if ($roomId !== null) {
+            TenantGuard::assertRoom($roomId, $tenantId, (int) $data['project_id']);
+        }
 
         $extFinish = isset($data['exterior_finish_id']) && $data['exterior_finish_id'] !== '' && $data['exterior_finish_id'] !== null
             ? (int) $data['exterior_finish_id'] : null;

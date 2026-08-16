@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { esc, safeUrl } from './security.js';
 
 export async function mountCatalog(main) {
   main.innerHTML = `<div class="panel"><h2>Catalog</h2>
@@ -15,25 +16,25 @@ export async function mountCatalog(main) {
   const renderProducts = async () => {
     const res = await api.get('/api/v1/catalog/products');
     document.getElementById('cat-list').innerHTML = `<table><thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Publish</th><th>Cost</th><th>Sell</th></tr></thead>
-      <tbody>${res.data.map(p => `<tr><td>${p.sku}</td><td>${p.name}</td><td>${p.category}</td><td>${p.publish_status}</td><td>${p.cost}</td><td>${p.selling_price}</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${res.data.map(p => `<tr><td>${esc(p.sku)}</td><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td>${esc(p.publish_status)}</td><td>${esc(p.cost)}</td><td>${esc(p.selling_price)}</td></tr>`).join('')}</tbody></table>`;
   };
 
   const renderLaminates = async () => {
     const res = await api.get('/api/v1/materials?category=LAMINATE');
     const cards = (res.data || []).map((m) => {
-      const thumb = m.assets?.find((a) => a.is_primary == 1)?.public_url
+      const thumb = safeUrl(m.assets?.find((a) => a.is_primary == 1)?.public_url
         || m.assets?.[0]?.public_url
-        || '';
+        || '');
       return `<div class="lam-card">
-        ${thumb ? `<img src="${thumb}" alt="${m.sku}" loading="lazy" />` : '<div class="lam-missing">No texture</div>'}
+        ${thumb ? `<img src="${esc(thumb)}" alt="${esc(m.sku)}" loading="lazy" />` : '<div class="lam-missing">No texture</div>'}
         <div class="lam-meta">
-          <strong>${m.sku}</strong>
-          <span class="badge">${m.series_code || ''} · ${m.series_name || ''}</span>
+          <strong>${esc(m.sku)}</strong>
+          <span class="badge">${esc(m.series_code || '')} · ${esc(m.series_name || '')}</span>
         </div>
       </div>`;
     }).join('');
     document.getElementById('cat-list').innerHTML = `
-      <p class="muted">${res.data?.length || 0} laminates (import via <code>php bin/import_laminates.php</code>)</p>
+      <p class="muted">${esc(res.data?.length || 0)} laminates (import via <code>php bin/import_laminates.php</code>)</p>
       <div class="lam-grid">${cards || '<p class="muted">No laminates imported yet.</p>'}</div>`;
   };
 

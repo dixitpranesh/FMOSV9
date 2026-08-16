@@ -6,6 +6,7 @@ namespace Fmos\Domains\Furniture;
 
 use Fmos\Core\Audit;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 
 /**
  * Composes multiple kitchen furniture instances into an L-shaped (or straight) layout.
@@ -22,6 +23,7 @@ final class KitchenCompositionService
     /** @return list<array<string,mixed>> */
     public function listByProject(int $tenantId, int $projectId): array
     {
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
         $pdo = Database::connection();
         $stmt = $pdo->prepare(
             'SELECT * FROM kitchen_compositions WHERE tenant_id=? AND project_id=? AND deleted_at IS NULL ORDER BY id DESC'
@@ -51,6 +53,7 @@ final class KitchenCompositionService
      */
     public function createLShape(int $tenantId, int $projectId, array $data): array
     {
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
         $name = trim((string) ($data['name'] ?? 'L Kitchen Base'));
         $height = (float) ($data['height_mm'] ?? 720);
         $depth = (float) ($data['depth_mm'] ?? 560);

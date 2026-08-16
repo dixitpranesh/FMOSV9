@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { esc, safeUrl } from './security.js';
 
 function finishUrl(m) {
   if (!m) return '';
@@ -6,9 +7,9 @@ function finishUrl(m) {
 }
 
 function finishThumb(m, cls = 'finish-thumb') {
-  const url = finishUrl(m);
+  const url = safeUrl(finishUrl(m));
   return url
-    ? `<img src="${url}" alt="${m.sku || ''}" class="${cls}" loading="lazy" />`
+    ? `<img src="${esc(url)}" alt="${esc(m.sku || '')}" class="${cls}" loading="lazy" />`
     : `<span class="${cls} finish-swatch-empty" title="No texture"></span>`;
 }
 
@@ -50,7 +51,7 @@ function mountFinishSelect(host, {
       inner.innerHTML = `<span class="finish-swatch finish-swatch-empty"></span><span class="muted">${emptyLabel}</span>`;
       return;
     }
-    inner.innerHTML = `${finishThumb(m, 'finish-swatch')}<span class="finish-code">${finishLabel(m)}</span>`;
+    inner.innerHTML = `${finishThumb(m, 'finish-swatch')}<span class="finish-code">${esc(finishLabel(m))}</span>`;
   };
 
   const renderMenu = () => {
@@ -480,10 +481,10 @@ export async function mountFurniture(main) {
   let activeTab = 'size';
 
   document.getElementById('tpl-grid').innerHTML = templates.map((t) => `
-    <button class="tpl-card" data-code="${t.code}">
-      <strong>${t.name}</strong>
-      <span class="badge">${t.category}</span>
-      <span class="muted">${t.description || ''}</span>
+    <button class="tpl-card" data-code="${esc(t.code)}">
+      <strong>${esc(t.name)}</strong>
+      <span class="badge">${esc(t.category)}</span>
+      <span class="muted">${esc(t.description || '')}</span>
       <span class="muted" style="font-size:.75rem">Click to add · customize anytime</span>
     </button>`).join('');
 
@@ -2211,14 +2212,14 @@ export async function mountFurniture(main) {
     if (!selectedId && res.data[0]?.id) selectedId = String(res.data[0].id);
     localStorage.setItem('fmos_furniture_id', selectedId || '');
     const rows = (res.data || []).map((f) => `<tr class="${String(f.id) === selectedId ? 'row-active' : ''}">
-      <td>${f.code || ''}</td>
-      <td>${f.name || ''}</td>
-      <td><span class="badge">${f.category || f.type || ''}</span></td>
-      <td>${f.width_mm || ''}×${f.height_mm || ''}×${f.depth_mm || ''}</td>
+      <td>${esc(f.code || '')}</td>
+      <td>${esc(f.name || '')}</td>
+      <td><span class="badge">${esc(f.category || f.type || '')}</span></td>
+      <td>${esc(f.width_mm || '')}×${esc(f.height_mm || '')}×${esc(f.depth_mm || '')}</td>
       <td>${(f.parameters?.layout?.bays || []).length || 0} bays</td>
       <td>
-        <button data-id="${f.id}" class="open-cust">Customize</button>
-        <button data-id="${f.id}" data-code="${(f.code || f.name || '').replace(/"/g, '')}" class="del-furn danger" type="button">Delete</button>
+        <button data-id="${esc(f.id)}" class="open-cust">Customize</button>
+        <button data-id="${esc(f.id)}" data-code="${esc(f.code || f.name || '')}" class="del-furn danger" type="button">Delete</button>
       </td>
     </tr>`).join('');
     document.getElementById('furn-list').innerHTML = `<table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>W×H×D</th><th>Layout</th><th></th></tr></thead>

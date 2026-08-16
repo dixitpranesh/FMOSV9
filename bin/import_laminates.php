@@ -66,7 +66,7 @@ foreach ($files as $file) {
         'supplier_code' => $supplier,
         'design_index' => $design,
         'colorway_index' => $colorway,
-        'default_roughness' => 0.55,
+        'default_roughness' => $series === 'ECO' ? 0.68 : 0.55,
         'default_metalness' => 0.0,
         'status' => 'ACTIVE',
         'attributes' => [

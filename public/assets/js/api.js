@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'fmos_token';
+const CSRF_KEY = 'fmos_csrf';
 
 export const api = {
   token() {
@@ -8,10 +9,19 @@ export const api = {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   },
+  csrf() {
+    return localStorage.getItem(CSRF_KEY);
+  },
+  setCsrf(token) {
+    if (token) localStorage.setItem(CSRF_KEY, token);
+    else localStorage.removeItem(CSRF_KEY);
+  },
   async request(method, path, body) {
     const headers = { Accept: 'application/json' };
     const token = this.token();
     if (token) headers.Authorization = `Bearer ${token}`;
+    const csrf = this.csrf();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(path, {
       method,
@@ -24,6 +34,7 @@ export const api = {
       const err = new Error(json?.error?.message || 'Request failed');
       err.code = json?.error?.code;
       err.status = res.status;
+      err.details = json?.error?.details;
       err.payload = json;
       throw err;
     }

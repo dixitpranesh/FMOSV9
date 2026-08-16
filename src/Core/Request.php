@@ -49,10 +49,22 @@ final class Request
         return $this->body[$key] ?? $this->query[$key] ?? $default;
     }
 
+    public function header(string $name, mixed $default = null): mixed
+    {
+        foreach ($this->headers as $k => $v) {
+            if (strcasecmp((string) $k, $name) === 0) {
+                return $v;
+            }
+        }
+        // Common CGI variants
+        $cgi = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+        return $this->server[$cgi] ?? $default;
+    }
+
     public function bearerToken(): ?string
     {
-        $auth = $this->headers['Authorization'] ?? '';
-        if (preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
+        $auth = $this->headers['Authorization'] ?? $this->header('Authorization', '') ?? '';
+        if (preg_match('/^Bearer\s+(.+)$/i', (string) $auth, $m)) {
             return trim($m[1]);
         }
         return null;

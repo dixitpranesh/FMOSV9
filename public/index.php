@@ -28,7 +28,8 @@ $router->get('/api/v1/health', static function () {
             'phase' => '0-foundation',
         ]);
     } catch (Throwable $e) {
-        Response::error('INTERNAL_ERROR', 'Health check failed', 500, ['message' => $e->getMessage()]);
+        Logger::error('Health check failed', ['error' => $e->getMessage()]);
+        Response::error('INTERNAL_ERROR', 'Health check failed', 500);
     }
 }, false);
 
@@ -49,6 +50,5 @@ try {
     $router->dispatch($request);
 } catch (Throwable $e) {
     Logger::error('Unhandled exception', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-    $debug = Env::bool('APP_DEBUG', false);
-    Response::error('INTERNAL_ERROR', $debug ? $e->getMessage() : 'Internal server error', 500);
+    Response::error('INTERNAL_ERROR', \Fmos\Core\Security::clientErrorMessage($e), 500);
 }

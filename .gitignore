@@ -11,10 +11,14 @@ composer.lock
 /storage/uploads/*
 /storage/exports/*
 /storage/tenants/*
+/storage/mail/*
+/storage/rate_limits/*
 !/storage/logs/.gitkeep
 !/storage/uploads/.gitkeep
 !/storage/exports/.gitkeep
 !/storage/tenants/.gitkeep
+!/storage/mail/.gitkeep
+!/storage/rate_limits/.gitkeep
 
 # Public media (imported textures)
 /public/media/tenants/*

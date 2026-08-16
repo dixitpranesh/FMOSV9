@@ -5,8 +5,10 @@ declare(strict_types=1);
 /** @var \Fmos\Core\Router $router */
 
 use Fmos\Core\Auth;
+use Fmos\Core\Database;
 use Fmos\Core\Request;
 use Fmos\Core\Response;
+use Fmos\Core\Security;
 use Fmos\Domains\Architecture\DesignService;
 use Fmos\Domains\Catalog\CatalogService;
 use Fmos\Domains\Catalog\MaterialService;
@@ -18,10 +20,14 @@ use Fmos\Domains\Furniture\InternalConfigCatalog;
 use Fmos\Domains\Furniture\KitchenCompositionService;
 use Fmos\Domains\Furniture\ModuleRulesEngine;
 use Fmos\Domains\Furniture\ModuleTypeCatalog;
+use Fmos\Domains\Identity\RateLimiter;
 use Fmos\Domains\Manufacturing\ManufacturingService;
 use Fmos\Domains\Manufacturing\SheetPlanService;
 use Fmos\Domains\Pricing\CommercialService;
-use Fmos\Core\Database;
+
+$clientIp = static function (): string {
+    return (string) ($_SERVER['REMOTE_ADDR'] ?? 'cli');
+};
 
 $router->get('/api/v1/rooms/{id}/design', static function (Request $r, array $p) {
     Auth::requirePermission('design.view');
@@ -580,18 +586,21 @@ $router->get('/api/v1/manufacturing/{id}/cutlist', static function (Request $req
     ));
 });
 
-$router->post('/api/v1/manufacturing/{id}/cutlist/export', static function (Request $r, array $p) {
+$router->post('/api/v1/manufacturing/{id}/cutlist/export', static function (Request $r, array $p) use ($clientIp) {
     Auth::requirePermission('manufacturing.view');
+    RateLimiter::allowOrFail('export', $clientIp(), 30, 300, 'Too many exports. Please slow down.');
     Response::json((new ExportService())->manufacturingPackageCsv(Auth::requireTenant(), (int) $p['id']));
 });
 
-$router->post('/api/v1/manufacturing/jobs/{id}/cutlist/export', static function (Request $r, array $p) {
+$router->post('/api/v1/manufacturing/jobs/{id}/cutlist/export', static function (Request $r, array $p) use ($clientIp) {
     Auth::requirePermission('manufacturing.view');
+    RateLimiter::allowOrFail('export', $clientIp(), 30, 300, 'Too many exports. Please slow down.');
     Response::json((new ExportService())->manufacturingJobCsv(Auth::requireTenant(), (int) $p['id']));
 });
 
-$router->post('/api/v1/manufacturing/cutlist/export', static function (Request $request) {
+$router->post('/api/v1/manufacturing/cutlist/export', static function (Request $request) use ($clientIp) {
     Auth::requirePermission('manufacturing.view');
+    RateLimiter::allowOrFail('export', $clientIp(), 30, 300, 'Too many exports. Please slow down.');
     $ids = $request->input('package_ids');
     if (!is_array($ids) || $ids === []) {
         Response::error('VALIDATION', 'package_ids required', 422);
@@ -651,8 +660,9 @@ $router->post('/api/v1/quotations/{id}/status', static function (Request $reques
     ));
 });
 
-$router->post('/api/v1/manufacturing/generate', static function (Request $request) {
+$router->post('/api/v1/manufacturing/generate', static function (Request $request) use ($clientIp) {
     Auth::requirePermission('manufacturing.generate');
+    RateLimiter::allowOrFail('manufacturing_generate', $clientIp(), 30, 300, 'Too many manufacturing jobs. Please slow down.');
     try {
         Response::json((new ManufacturingService())->validateAndGenerate(
             Auth::requireTenant(),
@@ -661,7 +671,7 @@ $router->post('/api/v1/manufacturing/generate', static function (Request $reques
         ), 201);
     } catch (\Throwable $e) {
         \Fmos\Core\Logger::error('manufacturing.generate failed', ['error' => $e->getMessage()]);
-        Response::error('JOB_FAILED', $e->getMessage(), 500);
+        Response::error('JOB_FAILED', Security::clientErrorMessage($e), 500);
     }
 });
 
@@ -669,13 +679,15 @@ $router->post('/api/v1/manufacturing/{id}/release', static function (Request $r,
     Response::json((new ManufacturingService())->release(Auth::requireTenant(), (int) $p['id']));
 });
 
-$router->post('/api/v1/manufacturing/{id}/nest', static function (Request $r, array $p) {
+$router->post('/api/v1/manufacturing/{id}/nest', static function (Request $r, array $p) use ($clientIp) {
     Auth::requirePermission('nesting.generate');
+    RateLimiter::allowOrFail('nesting', $clientIp(), 20, 300, 'Too many nesting requests. Please slow down.');
     Response::json((new ManufacturingService())->nest(Auth::requireTenant(), (int) $p['id']), 201);
 });
 
-$router->post('/api/v1/projects/{id}/nesting/sheet-plan', static function (Request $request, array $p) {
+$router->post('/api/v1/projects/{id}/nesting/sheet-plan', static function (Request $request, array $p) use ($clientIp) {
     Auth::requirePermission('nesting.generate');
+    RateLimiter::allowOrFail('nesting', $clientIp(), 20, 300, 'Too many nesting requests. Please slow down.');
     $packageIds = $request->input('package_ids');
     if (!is_array($packageIds)) {
         $packageIds = [];

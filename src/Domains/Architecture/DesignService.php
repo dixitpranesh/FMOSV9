@@ -7,6 +7,7 @@ namespace Fmos\Domains\Architecture;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 
 final class DesignService
 {
@@ -35,6 +36,8 @@ final class DesignService
             $id = (int) $data['id'];
             Audit::record('UPDATE', 'design_object', $id);
         } else {
+            TenantGuard::assertOwned('projects', (int) $data['project_id'], $tenantId);
+            TenantGuard::assertRoom((int) $data['room_id'], $tenantId, (int) $data['project_id']);
             $stmt = $pdo->prepare('INSERT INTO design_objects (tenant_id, project_id, room_id, parent_id, object_type, name, geometry_json, parameters_json, materials_json, revision, status, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NOW(), NOW())');
             $stmt->execute([
                 $tenantId,

@@ -7,6 +7,7 @@ namespace Fmos\Domains\Pricing;
 use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\Database;
+use Fmos\Core\TenantGuard;
 use Fmos\Domains\Catalog\HardwareSkuCatalog;
 use Fmos\Domains\Furniture\FurnitureEngine;
 use Fmos\Domains\Manufacturing\EdgeBandBom;
@@ -29,6 +30,8 @@ final class CommercialService
 
     public function generateBomBoqPrice(int $tenantId, int $projectId, int $furnitureId): array
     {
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
+        TenantGuard::assertOwned('furniture_instances', $furnitureId, $tenantId, 'project_id = ?', [$projectId]);
         $pdo = Database::connection();
         // Unified BOM path: prefer latest manufacturing package BOM revision when present (CRD-002)
         $pkgStmt = $pdo->prepare('SELECT id, bom_revision_id FROM manufacturing_packages WHERE tenant_id=? AND project_id=? AND furniture_id=? AND bom_revision_id IS NOT NULL ORDER BY id DESC LIMIT 1');
@@ -222,6 +225,8 @@ final class CommercialService
 
     public function createQuotation(int $tenantId, int $projectId, int $clientId, int $pricingCalculationId): array
     {
+        TenantGuard::assertOwned('projects', $projectId, $tenantId);
+        TenantGuard::assertOwned('clients', $clientId, $tenantId);
         $pdo = Database::connection();
         $stmt = $pdo->prepare('SELECT * FROM pricing_calculations WHERE id=? AND tenant_id=?');
         $stmt->execute([$pricingCalculationId, $tenantId]);
