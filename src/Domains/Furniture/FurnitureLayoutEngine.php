@@ -42,6 +42,34 @@ final class FurnitureLayoutEngine
         $logical[] = $this->panel($this->partName($unit, 'Bottom Panel'), $internalW, $d, $t, 1, 'carcass', 'BOTTOM_PANEL');
         $logical[] = $this->panel($this->partName($unit, 'Back Panel'), $h, $w, $backT, 1, 'carcass', 'BACK_PANEL');
 
+        // Installation fillers (opt-in only — never inferred from 3D gaps).
+        // Cut size matches user example: height × filler width × board thickness.
+        $fillers = FurnitureFillers::fromParameters($p);
+        $leftFillerW = FurnitureFillers::leftWidth($fillers);
+        $rightFillerW = FurnitureFillers::rightWidth($fillers);
+        if ($leftFillerW > 0) {
+            $logical[] = $this->panel(
+                $this->partName($unit, 'Left Filler Panel'),
+                $h,
+                $leftFillerW,
+                $t,
+                1,
+                'filler',
+                'FILLER_LEFT'
+            );
+        }
+        if ($rightFillerW > 0) {
+            $logical[] = $this->panel(
+                $this->partName($unit, 'Right Filler Panel'),
+                $h,
+                $rightFillerW,
+                $t,
+                1,
+                'filler',
+                'FILLER_RIGHT'
+            );
+        }
+
         if ($plinth > 0) {
             $logical[] = $this->panel($this->partName($unit, 'Plinth Front'), $w, $plinth, $t, 1, 'plinth', 'PLINTH_FRONT');
             $logical[] = $this->panel($this->partName($unit, 'Plinth Side'), $d - $t, $plinth, $t, 2, 'plinth', 'PLINTH_SIDE');
@@ -123,8 +151,30 @@ final class FurnitureLayoutEngine
                         'HANGING_CLEAT'
                     );
                     $logical[] = $this->hardware($this->partName($unit, "{$secPrefix} - Hanging Rod"), 1, 'HANGING_ROD');
-                } elseif ($type === 'OPEN') {
-                    // Optional back-of-niche shelf strip not required; keep open void.
+                } elseif ($type === 'OPEN' || $type === 'MIRROR') {
+                    $secH = max(1.0, (float) ($section['height_mm'] ?? 1));
+                    $this->appendNicheLiners(
+                        $logical,
+                        $unit,
+                        $secPrefix,
+                        $bayW,
+                        $secH,
+                        $internalDepth,
+                        $t,
+                        $backT
+                    );
+                    if ($type === 'MIRROR') {
+                        $glass = FurnitureMirror::resolveGlass($section, $bayW, $secH);
+                        $logical[] = $this->panel(
+                            $this->partName($unit, "{$secPrefix} - Mirror"),
+                            $glass['height_mm'],
+                            $glass['width_mm'],
+                            FurnitureMirror::THICKNESS_MM,
+                            1,
+                            'mirror',
+                            'MIRROR_PANEL'
+                        );
+                    }
                 }
             }
         }
@@ -155,6 +205,7 @@ final class FurnitureLayoutEngine
             'WARDROBE', 'WARDROBE_SLIDING', 'WARDROBE_LOFT' => 'Wardrobe',
             'TV_UNIT' => 'TV Unit',
             'KITCHEN_BASE' => 'Kitchen Base',
+            'KITCHEN_CORNER' => 'Kitchen Corner',
             'KITCHEN_WALL' => 'Kitchen Wall',
             'KITCHEN_TALL' => 'Kitchen Tall',
             'CHEST_DRAWERS' => 'Chest',
@@ -261,6 +312,71 @@ final class FurnitureLayoutEngine
             $sections[$i]['height_mm'] = $each;
         }
         return array_values($sections);
+    }
+
+    /**
+     * Client-visible liners for open / dressing niches (EXPO by role default).
+     * Covers partition/end-panel interiors that would otherwise stay interior laminate.
+     *
+     * @param list<array<string,mixed>> $logical
+     */
+    private function appendNicheLiners(
+        array &$logical,
+        string $unit,
+        string $secPrefix,
+        float $bayW,
+        float $secH,
+        float $internalDepth,
+        float $t,
+        float $backT
+    ): void {
+        $linerT = max(6.0, min($t, 12.0));
+        $logical[] = $this->panel(
+            $this->partName($unit, "{$secPrefix} - Niche Back"),
+            $secH,
+            max(1.0, $bayW - 2),
+            max(6.0, $backT),
+            1,
+            'niche',
+            'NICHE_BACK'
+        );
+        $logical[] = $this->panel(
+            $this->partName($unit, "{$secPrefix} - Niche Side Left"),
+            $secH,
+            max(1.0, $internalDepth - 4),
+            $linerT,
+            1,
+            'niche',
+            'NICHE_SIDE_LEFT'
+        );
+        $logical[] = $this->panel(
+            $this->partName($unit, "{$secPrefix} - Niche Side Right"),
+            $secH,
+            max(1.0, $internalDepth - 4),
+            $linerT,
+            1,
+            'niche',
+            'NICHE_SIDE_RIGHT'
+        );
+        $logical[] = $this->panel(
+            $this->partName($unit, "{$secPrefix} - Niche Sill"),
+            max(1.0, $bayW - 2),
+            max(1.0, $internalDepth - 4),
+            $linerT,
+            1,
+            'niche',
+            'NICHE_SILL'
+        );
+        // Underside of niche top (client looks up into dressing opening).
+        $logical[] = $this->panel(
+            $this->partName($unit, "{$secPrefix} - Niche Header"),
+            max(1.0, $bayW - 2),
+            max(1.0, $internalDepth - 4),
+            $linerT,
+            1,
+            'niche',
+            'NICHE_HEADER'
+        );
     }
 
     /** @return array<string,mixed> */

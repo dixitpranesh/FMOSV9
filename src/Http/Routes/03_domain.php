@@ -14,6 +14,10 @@ use Fmos\Domains\Export\ExportService;
 use Fmos\Domains\Furniture\FurnitureEngine;
 use Fmos\Domains\Furniture\FurnitureLayoutEngine;
 use Fmos\Domains\Furniture\FurnitureViewService;
+use Fmos\Domains\Furniture\InternalConfigCatalog;
+use Fmos\Domains\Furniture\KitchenCompositionService;
+use Fmos\Domains\Furniture\ModuleRulesEngine;
+use Fmos\Domains\Furniture\ModuleTypeCatalog;
 use Fmos\Domains\Manufacturing\ManufacturingService;
 use Fmos\Domains\Manufacturing\SheetPlanService;
 use Fmos\Domains\Pricing\CommercialService;
@@ -83,6 +87,139 @@ $router->post('/api/v1/catalog/seed', static function () {
 $router->get('/api/v1/furniture/templates', static function () {
     Auth::requirePermission('furniture.view');
     Response::json((new FurnitureEngine())->listTemplates());
+});
+
+$router->get('/api/v1/furniture/module-types', static function () {
+    Auth::requirePermission('furniture.view');
+    Response::json(array_values(ModuleTypeCatalog::all()));
+});
+
+$router->get('/api/v1/furniture/module-types/{code}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    $mod = ModuleTypeCatalog::get((string) $p['code']);
+    if ($mod === null) {
+        Response::error('NOT_FOUND', 'Unknown module type', 404);
+        return;
+    }
+    Response::json($mod);
+});
+
+$router->get('/api/v1/furniture/internal-configs', static function (Request $request) {
+    Auth::requirePermission('furniture.view');
+    $all = array_values(InternalConfigCatalog::all());
+    $cat = $request->input('category');
+    if (is_string($cat) && $cat !== '') {
+        $catU = strtoupper($cat);
+        $all = array_values(array_filter(
+            $all,
+            static fn ($c) => strtoupper((string) ($c['category'] ?? '')) === $catU
+        ));
+    }
+    Response::json($all);
+});
+
+$router->get('/api/v1/furniture/layout-presets', static function (Request $request) {
+    Auth::requirePermission('furniture.view');
+    $category = $request->input('category');
+    Response::json(InternalConfigCatalog::layoutPresets(is_string($category) ? $category : null));
+});
+
+$router->post('/api/v1/furniture/instances/{id}/recommend-internals', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.view');
+    $engine = new FurnitureEngine();
+    $inst = $engine->get(Auth::requireTenant(), (int) $p['id']);
+    $params = $inst['parameters'] ?? [];
+    $layout = $request->input('layout');
+    if (!is_array($layout)) {
+        $layout = $params['layout'] ?? [];
+    }
+    $dims = [
+        'width' => (float) ($request->input('width') ?? $params['width'] ?? $inst['width_mm'] ?? 0),
+        'height' => (float) ($request->input('height') ?? $params['height'] ?? $inst['height_mm'] ?? 0),
+        'depth' => (float) ($request->input('depth') ?? $params['depth'] ?? $inst['depth_mm'] ?? 0),
+    ];
+    $moduleType = (string) ($inst['type'] ?? $inst['template_code'] ?? '');
+    try {
+        Response::json((new ModuleRulesEngine())->recommend($moduleType, $dims, is_array($layout) ? $layout : []));
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
+});
+
+$router->post('/api/v1/furniture/instances/{id}/validate-layout', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.view');
+    $engine = new FurnitureEngine();
+    $inst = $engine->get(Auth::requireTenant(), (int) $p['id']);
+    $params = $inst['parameters'] ?? [];
+    $layout = $request->input('layout');
+    if (!is_array($layout)) {
+        Response::error('VALIDATION', 'layout object required', 422);
+        return;
+    }
+    $dims = [
+        'width' => (float) ($request->input('width') ?? $params['width'] ?? $inst['width_mm'] ?? 0),
+        'height' => (float) ($request->input('height') ?? $params['height'] ?? $inst['height_mm'] ?? 0),
+        'depth' => (float) ($request->input('depth') ?? $params['depth'] ?? $inst['depth_mm'] ?? 0),
+    ];
+    $moduleType = (string) ($inst['type'] ?? $inst['template_code'] ?? '');
+    try {
+        Response::json((new ModuleRulesEngine())->validate($moduleType, $dims, $layout));
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
+});
+
+$router->post('/api/v1/furniture/instances/{id}/apply-internal-config', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $tenantId = Auth::requireTenant();
+    $id = (int) $p['id'];
+    $configId = (string) ($request->input('config_id') ?? '');
+    if ($configId === '') {
+        Response::error('VALIDATION', 'config_id required', 422);
+        return;
+    }
+    $furnEngine = new FurnitureEngine();
+    $inst = $furnEngine->get($tenantId, $id);
+    $params = $inst['parameters'] ?? [];
+    $layout = $request->input('layout');
+    if (!is_array($layout)) {
+        $layout = $params['layout'] ?? [];
+    }
+    $bayId = $request->input('bay_id');
+    $action = strtolower((string) ($request->input('action') ?? 'apply'));
+    $rules = new ModuleRulesEngine();
+    try {
+        if ($action === 'remove') {
+            $layout = $rules->remove($configId, is_array($layout) ? $layout : [], is_string($bayId) ? $bayId : null);
+            $doorType = null;
+            $shutterCount = null;
+        } else {
+            $result = $rules->apply($configId, is_array($layout) ? $layout : [], is_string($bayId) ? $bayId : null);
+            $layout = $result['layout'];
+            $doorType = $result['door_type'];
+            $shutterCount = $result['shutter_count'];
+        }
+        $merged = ['layout' => $layout];
+        if ($doorType !== null) {
+            $merged['door_type'] = $doorType;
+        }
+        if ($shutterCount !== null) {
+            $merged['shutter_count'] = $shutterCount;
+        }
+        $updated = $furnEngine->updateParameters($tenantId, $id, $merged);
+        $moduleType = (string) ($updated['type'] ?? $inst['type'] ?? '');
+        $dims = [
+            'width' => (float) ($updated['parameters']['width'] ?? $updated['width_mm'] ?? 0),
+            'height' => (float) ($updated['parameters']['height'] ?? $updated['height_mm'] ?? 0),
+            'depth' => (float) ($updated['parameters']['depth'] ?? $updated['depth_mm'] ?? 0),
+        ];
+        Response::json([
+            'instance' => $updated,
+            'recommendation' => $rules->recommend($moduleType, $dims, $updated['parameters']['layout'] ?? []),
+        ]);
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    }
 });
 
 $router->post('/api/v1/furniture/instances', static function (Request $request) {
@@ -218,6 +355,17 @@ $router->put('/api/v1/furniture/instances/{id}/customize', static function (Requ
                     $merged['expo'] = $existing['parameters']['expo'];
                 }
             }
+            // Preserve fillers unless explicitly provided in parameters
+            if (!isset($merged['fillers'])) {
+                $existing = $existing ?? $engine->get($tenantId, $id);
+                if (!empty($existing['parameters']['fillers']) && is_array($existing['parameters']['fillers'])) {
+                    $merged['fillers'] = $existing['parameters']['fillers'];
+                }
+            } else {
+                $merged['fillers'] = \Fmos\Domains\Furniture\FurnitureFillers::normalize(
+                    is_array($merged['fillers']) ? $merged['fillers'] : null
+                );
+            }
             $engine->updateParameters($tenantId, $id, $merged);
         }
         if (is_array($expo)) {
@@ -307,6 +455,88 @@ $router->delete('/api/v1/furniture/instances/{id}/components/{cid}', static func
     Auth::requirePermission('furniture.update');
     (new FurnitureEngine())->softDeleteComponent(Auth::requireTenant(), (int) $p['id'], (int) $p['cid']);
     Response::json(['deleted' => true]);
+});
+
+$router->delete('/api/v1/furniture/instances/{id}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.update');
+    (new FurnitureEngine())->softDelete(Auth::requireTenant(), (int) $p['id']);
+    Response::json(['deleted' => true]);
+});
+
+$router->put('/api/v1/furniture/instances/{id}/position', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.update');
+    $pos = $request->input('position');
+    if (!is_array($pos)) {
+        Response::error('VALIDATION', 'position object required', 422);
+        return;
+    }
+    Response::json((new FurnitureEngine())->updatePosition(Auth::requireTenant(), (int) $p['id'], $pos));
+});
+
+$router->get('/api/v1/projects/{id}/kitchen-compositions', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new KitchenCompositionService())->listByProject(
+        Auth::requireTenant(),
+        (int) $p['id']
+    ));
+});
+
+$router->post('/api/v1/projects/{id}/kitchen-compositions', static function (Request $request, array $p) {
+    Auth::requirePermission('furniture.create');
+    try {
+        Response::json((new KitchenCompositionService())->createLShape(
+            Auth::requireTenant(),
+            (int) $p['id'],
+            [
+                'name' => $request->input('name'),
+                'height_mm' => $request->input('height_mm'),
+                'depth_mm' => $request->input('depth_mm'),
+                'corner_size_mm' => $request->input('corner_size_mm'),
+                'run_a_length_mm' => $request->input('run_a_length_mm'),
+                'run_b_length_mm' => $request->input('run_b_length_mm'),
+                'module_width_mm' => $request->input('module_width_mm'),
+                'run_a_modules' => $request->input('run_a_modules'),
+                'run_b_modules' => $request->input('run_b_modules'),
+                'exterior_finish_id' => $request->input('exterior_finish_id'),
+                'interior_finish_id' => $request->input('interior_finish_id'),
+                'material_id' => $request->input('material_id'),
+            ]
+        ), 201);
+    } catch (\InvalidArgumentException $e) {
+        Response::error('VALIDATION', $e->getMessage(), 422);
+    } catch (\RuntimeException $e) {
+        Response::error('ERROR', $e->getMessage(), 400);
+    }
+});
+
+$router->get('/api/v1/kitchen-compositions/{id}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new KitchenCompositionService())->get(
+        Auth::requireTenant(),
+        (int) $p['id']
+    ));
+});
+
+$router->delete('/api/v1/kitchen-compositions/{id}', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.update');
+    (new KitchenCompositionService())->softDelete(Auth::requireTenant(), (int) $p['id']);
+    Response::json(['deleted' => true]);
+});
+
+$router->get('/api/v1/kitchen-compositions/{id}/2d', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new KitchenCompositionService())->drawingPlan(
+        Auth::requireTenant(),
+        (int) $p['id']
+    ));
+});
+
+$router->get('/api/v1/kitchen-compositions/{id}/3d-model', static function (Request $r, array $p) {
+    Auth::requirePermission('furniture.view');
+    Response::json((new KitchenCompositionService())->model3d(
+        Auth::requireTenant(),
+        (int) $p['id']
+    ));
 });
 
 $router->get('/api/v1/furniture/instances/{id}/2d', static function (Request $request, array $p) {

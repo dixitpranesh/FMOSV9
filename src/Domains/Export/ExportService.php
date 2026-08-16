@@ -133,23 +133,108 @@ final class ExportService
             . ' | Client: ' . htmlspecialchars((string) $tb['client'])
             . ' | Code: ' . htmlspecialchars((string) ($tb['code'] ?? ''))
             . ' | Rev: ' . (int) $tb['revision'] . '</div>';
-        $bw = max(1, (float) $draw['bounds']['width']);
-        $bh = max(1, (float) ($view === 'PLAN' ? $draw['bounds']['depth'] : $draw['bounds']['height']));
-        $scale = min(800 / $bw, 500 / $bh);
-        $html .= '<svg width="' . (int) ($bw * $scale + 80) . '" height="' . (int) ($bh * $scale + 80) . '">';
-        $html .= '<g transform="translate(40,40) scale(' . $scale . ')">';
+        $bw = max(1.0, (float) $draw['bounds']['width']);
+        $bh = max(1.0, (float) ($view === 'PLAN' ? $draw['bounds']['depth'] : $draw['bounds']['height']));
+        $minX = 0.0;
+        $minY = 0.0;
+        $maxX = $bw;
+        $maxY = $bh;
+        foreach ($draw['dimensions'] as $dim) {
+            $minX = min($minX, (float) $dim['from'][0], (float) $dim['to'][0]);
+            $maxX = max($maxX, (float) $dim['from'][0], (float) $dim['to'][0]);
+            $minY = min($minY, (float) $dim['from'][1], (float) $dim['to'][1]);
+            $maxY = max($maxY, (float) $dim['from'][1], (float) $dim['to'][1]);
+        }
+        $pad = max(140.0, $bw * 0.08);
+        $minX -= $pad * 0.45;
+        $maxX += $pad;
+        $minY -= $pad * 0.35;
+        $maxY += 40.0;
+        $contentW = max(1.0, $maxX - $minX);
+        $contentH = max(1.0, $maxY - $minY);
+        $scale = min(900 / $contentW, 620 / $contentH);
+        $svgW = (int) ($contentW * $scale + 24);
+        $svgH = (int) ($contentH * $scale + 24);
+        $sw = 1.5 / $scale;
+        $html .= '<svg width="' . $svgW . '" height="' . $svgH . '" viewBox="0 0 ' . $svgW . ' ' . $svgH . '">';
+        $html .= '<g transform="translate(' . (12 - $minX * $scale) . ',' . (12 - $minY * $scale) . ') scale(' . $scale . ')">';
+        $skipLabel = ['outer' => true, 'inner' => true, 'bay' => true, 'expo' => true, 'carcass' => true];
+        $sideStacks = ['left' => 0, 'right' => 0, 'top' => 0, 'bottom' => 0];
         foreach ($draw['elements'] as $el) {
-            if ($el['type'] === 'rect') {
+            $type = (string) ($el['type'] ?? '');
+            if ($type === 'rect') {
+                $role = (string) ($el['role'] ?? '');
+                $fill = $role === 'expo' ? 'rgba(30,136,229,0.18)' : 'none';
+                $stroke = $role === 'expo' ? '#1565c0' : '#222';
+                $dash = $role === 'expo' ? ' stroke-dasharray="' . (6 / $scale) . ' ' . (4 / $scale) . '"' : '';
                 $html .= '<rect x="' . $el['x'] . '" y="' . $el['y'] . '" width="' . $el['w'] . '" height="' . $el['h']
-                    . '" fill="none" stroke="#222" stroke-width="' . (2 / $scale) . '"/>';
-            } elseif ($el['type'] === 'line') {
+                    . '" fill="' . $fill . '" stroke="' . $stroke . '" stroke-width="' . ($role === 'expo' ? 2.4 / $scale : $sw) . '"' . $dash . '/>';
+                if (!empty($el['label']) && empty($skipLabel[$role]) && (float) $el['w'] > 80 && (float) $el['h'] > 40) {
+                    $html .= '<text x="' . ((float) $el['x'] + 8) . '" y="' . ((float) $el['y'] + 22)
+                        . '" font-size="' . (13 / $scale) . '" fill="#334">' . htmlspecialchars((string) $el['label']) . '</text>';
+                }
+            } elseif ($type === 'line') {
                 $html .= '<line x1="' . $el['x1'] . '" y1="' . $el['y1'] . '" x2="' . $el['x2'] . '" y2="' . $el['y2']
-                    . '" stroke="#666" stroke-width="' . (1.5 / $scale) . '"/>';
+                    . '" stroke="' . (!empty($el['expo']) ? '#1565c0' : '#666') . '" stroke-width="' . (!empty($el['expo']) ? 2.4 / $scale : $sw) . '"/>';
+            } elseif ($type === 'callout' || (($el['role'] ?? '') === 'expo-label')) {
+                $side = (string) ($el['side'] ?? 'right');
+                $stack = $sideStacks[$side] ?? 0;
+                $sideStacks[$side] = $stack + 1;
+                $ax = (float) ($el['anchor_x'] ?? $el['x'] ?? 0);
+                $ay = (float) ($el['anchor_y'] ?? $el['y'] ?? 0);
+                $gap = 36 + $stack * 22;
+                $lx = $ax;
+                $ly = $ay;
+                if ($side === 'left') {
+                    $lx = $ax - $gap - 40;
+                    $ly = $ay + $stack * 18;
+                } elseif ($side === 'right') {
+                    $lx = $ax + $gap + 10;
+                    $ly = $ay + $stack * 18;
+                } elseif ($side === 'top') {
+                    $lx = $ax + 10 + $stack * 14;
+                    $ly = $ay - $gap;
+                } else {
+                    $lx = $ax + 10 + $stack * 14;
+                    $ly = $ay + $gap;
+                }
+                $html .= '<circle cx="' . $ax . '" cy="' . $ay . '" r="' . (2.4 / $scale) . '" fill="#0d47a1"/>';
+                $html .= '<line x1="' . $ax . '" y1="' . $ay . '" x2="' . $lx . '" y2="' . $ly
+                    . '" stroke="#1565c0" stroke-width="' . $sw . '"/>';
+                $html .= '<text x="' . $lx . '" y="' . $ly . '" font-size="' . (12 / $scale)
+                    . '" font-weight="700" fill="#0d47a1">' . htmlspecialchars((string) ($el['text'] ?? 'EXPO')) . '</text>';
             }
         }
         foreach ($draw['dimensions'] as $dim) {
-            $html .= '<text x="' . (($dim['from'][0] + $dim['to'][0]) / 2) . '" y="' . (($dim['from'][1] + $dim['to'][1]) / 2)
-                . '" font-size="' . (14 / $scale) . '" fill="#c00">' . htmlspecialchars((string) $dim['label']) . '</text>';
+            $x1 = (float) $dim['from'][0];
+            $y1 = (float) $dim['from'][1];
+            $x2 = (float) $dim['to'][0];
+            $y2 = (float) $dim['to'][1];
+            $horizontal = (($dim['axis'] ?? '') === 'H') || abs($y2 - $y1) < abs($x2 - $x1);
+            $html .= '<line x1="' . $x1 . '" y1="' . $y1 . '" x2="' . $x2 . '" y2="' . $y2
+                . '" stroke="#c62828" stroke-width="' . $sw . '"/>';
+            $tick = 8 / $scale;
+            if ($horizontal) {
+                $html .= '<line x1="' . $x1 . '" y1="' . ($y1 - $tick) . '" x2="' . $x1 . '" y2="' . ($y1 + $tick)
+                    . '" stroke="#c62828" stroke-width="' . $sw . '"/>';
+                $html .= '<line x1="' . $x2 . '" y1="' . ($y2 - $tick) . '" x2="' . $x2 . '" y2="' . ($y2 + $tick)
+                    . '" stroke="#c62828" stroke-width="' . $sw . '"/>';
+                $mx = ($x1 + $x2) / 2;
+                $my = $y1 - (10 / $scale);
+                $html .= '<text x="' . $mx . '" y="' . $my . '" text-anchor="middle" font-size="' . (13 / $scale)
+                    . '" fill="#c62828">' . htmlspecialchars((string) $dim['label']) . '</text>';
+            } else {
+                $html .= '<line x1="' . ($x1 - $tick) . '" y1="' . $y1 . '" x2="' . ($x1 + $tick) . '" y2="' . $y1
+                    . '" stroke="#c62828" stroke-width="' . $sw . '"/>';
+                $html .= '<line x1="' . ($x2 - $tick) . '" y1="' . $y2 . '" x2="' . ($x2 + $tick) . '" y2="' . $y2
+                    . '" stroke="#c62828" stroke-width="' . $sw . '"/>';
+                $outsideRight = (($x1 + $x2) / 2) > ($bw * 0.5);
+                $mx = $outsideRight ? $x1 + (14 / $scale) : $x1 - (10 / $scale);
+                $my = ($y1 + $y2) / 2;
+                $html .= '<text x="' . $mx . '" y="' . $my . '" text-anchor="middle" font-size="' . (13 / $scale)
+                    . '" fill="#c62828" transform="rotate(-90 ' . $mx . ' ' . $my . ')">'
+                    . htmlspecialchars((string) $dim['label']) . '</text>';
+            }
         }
         $html .= '</g></svg></body></html>';
 

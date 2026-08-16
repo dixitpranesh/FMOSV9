@@ -21,14 +21,33 @@ export async function mountManufacturing(main) {
 
   const loadFurniture = async () => {
     if (!projectId) return;
+    let preferred = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem('fmos_mfg_furniture_ids') || '[]');
+      if (Array.isArray(raw)) preferred = raw.map(Number).filter((n) => n > 0);
+    } catch {
+      /* ignore */
+    }
+    const single = Number(localStorage.getItem('fmos_furniture_id') || 0);
     const res = await api.get(`/api/v1/projects/${projectId}/furniture`);
-    document.getElementById('mfg-furn-list').innerHTML = `
+    const banner = preferred.length
+      ? `<p class="ok" id="mfg-kc-banner">Pre-selected ${preferred.length} kitchen composition module${preferred.length > 1 ? 's' : ''} from Furniture. <button type="button" class="secondary" id="mfg-clear-pref" style="margin-left:.5rem">Clear selection hint</button></p>`
+      : '';
+    document.getElementById('mfg-furn-list').innerHTML = `${banner}
       <table><thead><tr><th></th><th>Code</th><th>Name</th><th>Size</th></tr></thead>
-      <tbody>${(res.data || []).map((f) => `<tr>
-        <td><input type="checkbox" class="mfg-fid" value="${f.id}" ${String(f.id) === localStorage.getItem('fmos_furniture_id') ? 'checked' : ''}></td>
+      <tbody>${(res.data || []).map((f) => {
+        const id = Number(f.id);
+        const checked = preferred.includes(id) || (preferred.length === 0 && single > 0 && id === single);
+        return `<tr>
+        <td><input type="checkbox" class="mfg-fid" value="${f.id}" ${checked ? 'checked' : ''}></td>
         <td>${f.code || ''}</td><td>${f.name}</td>
         <td>${f.width_mm}×${f.height_mm}×${f.depth_mm}</td>
-      </tr>`).join('')}</tbody></table>`;
+      </tr>`;
+      }).join('')}</tbody></table>`;
+    document.getElementById('mfg-clear-pref')?.addEventListener('click', () => {
+      localStorage.removeItem('fmos_mfg_furniture_ids');
+      loadFurniture();
+    });
   };
 
   const selectedIds = () => [...document.querySelectorAll('.mfg-fid:checked')].map((el) => Number(el.value));

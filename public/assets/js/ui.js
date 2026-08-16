@@ -8,8 +8,11 @@ export function renderLogin() {
   document.getElementById('user-box').innerHTML = '';
   main.innerHTML = `
     <div class="panel login-wrap">
-      <h1>FMOS Login</h1>
-      <p class="muted">Design-to-Manufacturing Operating System</p>
+      <div class="login-brand">
+        <img class="login-logo" src="/assets/brand/fmos-logo.png" alt="FMOS — Furniture Manufacturing Operating System" />
+      </div>
+      <h1>Sign in</h1>
+      <p class="login-sub muted">Design-to-Manufacturing Operating System</p>
       <form id="login-form">
         <label>Email</label>
         <input name="email" type="email" autocomplete="username" required value="owner@demo.fmos" />

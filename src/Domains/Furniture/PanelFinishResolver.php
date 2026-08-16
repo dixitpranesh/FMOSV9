@@ -33,6 +33,25 @@ final class PanelFinishResolver
         $interiorId = $interiorFinishId ?: $exteriorFinishId;
         $exteriorId = $exteriorFinishId ?: $interiorFinishId;
 
+        // Glass is never an EXPO laminate surface — keep finish resolution non-EXPO.
+        if (strtoupper($componentRole) === 'MIRROR_PANEL') {
+            return [
+                'expo' => false,
+                'face_exterior' => [
+                    'name' => 'glass_front',
+                    'expo' => false,
+                    'finish_id' => null,
+                    'finish_role' => 'mirror',
+                ],
+                'face_interior' => [
+                    'name' => 'glass_back',
+                    'expo' => false,
+                    'finish_id' => null,
+                    'finish_role' => 'mirror',
+                ],
+            ];
+        }
+
         if ($isExpo) {
             return [
                 'expo' => true,
@@ -75,12 +94,17 @@ final class PanelFinishResolver
     public static function expoFaceIndex(string $componentRole): ?int
     {
         return match (strtoupper($componentRole)) {
-            'LEFT_PANEL' => 1,   // -X outside
-            'RIGHT_PANEL' => 0,  // +X outside
+            'LEFT_PANEL', 'FILLER_LEFT' => 1,   // -X outside (wall / client side)
+            'RIGHT_PANEL', 'FILLER_RIGHT' => 0, // +X outside
             'TOP_PANEL' => 2,    // +Y outside
             'BOTTOM_PANEL' => 3, // -Y outside
             'BACK_PANEL' => 5,   // -Z outside (rear of unit)
-            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT' => 4, // +Z front
+            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT', 'NICHE_BACK' => 4, // +Z front
+            'NICHE_SIDE_LEFT' => 0,  // +X toward niche opening
+            'NICHE_SIDE_RIGHT' => 1, // -X toward niche opening
+            'NICHE_SILL' => 2,       // +Y top of sill
+            'NICHE_HEADER' => 3,     // -Y underside of niche top
+            'MIRROR_PANEL' => 4, // glass front (+Z); not an EXPO laminate face
             default => null,
         };
     }

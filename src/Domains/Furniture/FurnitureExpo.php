@@ -31,12 +31,25 @@ final class FurnitureExpo
         'LOFT_BASE' => 'Loft Base',
         'HANGING_CLEAT' => 'Hanging Cleat',
         'DRAWER_FRONT' => 'Drawer Front',
+        'MIRROR_PANEL' => 'Mirror (glass)',
+        'NICHE_BACK' => 'Dressing Niche Back',
+        'NICHE_SIDE_LEFT' => 'Dressing Niche Side (Left)',
+        'NICHE_SIDE_RIGHT' => 'Dressing Niche Side (Right)',
+        'NICHE_SILL' => 'Dressing Niche Sill',
+        'NICHE_HEADER' => 'Dressing Niche Header',
+        'FILLER_LEFT' => 'Left Filler',
+        'FILLER_RIGHT' => 'Right Filler',
     ];
 
-    /** Roles that default to EXPO without user action (doors/fronts). */
+    /** Roles that default to EXPO without user action (doors/fronts/fillers/niche surrounds). */
     public static function defaultTrueRoles(): array
     {
-        return ['SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT'];
+        // Mirror is glass — never implied EXPO laminate. Niche liners are client-visible surrounds.
+        return [
+            'SHUTTER', 'SLIDING_DOOR', 'LOFT_SHUTTER', 'DRAWER_FRONT',
+            'NICHE_BACK', 'NICHE_SIDE_LEFT', 'NICHE_SIDE_RIGHT', 'NICHE_SILL', 'NICHE_HEADER',
+            'FILLER_LEFT', 'FILLER_RIGHT',
+        ];
     }
 
     /**
@@ -145,7 +158,22 @@ final class FurnitureExpo
         if (str_contains($n, 'bottom panel') || preg_match('/\bbottom\b/', $n) && !str_contains($n, 'drawer')) {
             return 'BOTTOM_PANEL';
         }
-        if (str_contains($n, 'back panel') || preg_match('/\bback\b/', $n) && !str_contains($n, 'drawer')) {
+        if (str_contains($n, 'niche side left') || (str_contains($n, 'niche side') && str_contains($n, 'left'))) {
+            return 'NICHE_SIDE_LEFT';
+        }
+        if (str_contains($n, 'niche side right') || (str_contains($n, 'niche side') && str_contains($n, 'right'))) {
+            return 'NICHE_SIDE_RIGHT';
+        }
+        if (str_contains($n, 'niche sill')) {
+            return 'NICHE_SILL';
+        }
+        if (str_contains($n, 'niche header') || str_contains($n, 'niche top')) {
+            return 'NICHE_HEADER';
+        }
+        if (str_contains($n, 'niche back') || (str_contains($n, 'dressing niche') && !str_contains($n, 'side') && !str_contains($n, 'sill') && !str_contains($n, 'header'))) {
+            return 'NICHE_BACK';
+        }
+        if (str_contains($n, 'back panel') || (preg_match('/\bback\b/', $n) && !str_contains($n, 'drawer') && !str_contains($n, 'niche'))) {
             return 'BACK_PANEL';
         }
         if (str_contains($n, 'sliding door')) {
@@ -159,6 +187,9 @@ final class FurnitureExpo
         }
         if (str_contains($n, 'drawer front')) {
             return 'DRAWER_FRONT';
+        }
+        if (str_contains($n, 'mirror')) {
+            return 'MIRROR_PANEL';
         }
         if (str_contains($n, 'partition')) {
             return 'VERTICAL_PARTITION';
@@ -180,6 +211,12 @@ final class FurnitureExpo
         }
         if (str_contains($n, 'shelf')) {
             return 'SHELF';
+        }
+        if (str_contains($n, 'left filler') || (str_contains($n, 'filler') && str_contains($n, 'left'))) {
+            return 'FILLER_LEFT';
+        }
+        if (str_contains($n, 'right filler') || (str_contains($n, 'filler') && str_contains($n, 'right'))) {
+            return 'FILLER_RIGHT';
         }
         return '';
     }

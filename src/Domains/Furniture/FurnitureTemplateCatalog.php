@@ -87,6 +87,22 @@ final class FurnitureTemplateCatalog
                     'layout' => ['type' => 'layout', 'default' => self::defaultKitchenBaseLayout()],
                 ],
             ],
+            'KITCHEN_CORNER' => [
+                'name' => 'Kitchen Corner (Blind)',
+                'category' => 'KITCHEN',
+                'description' => 'Blind corner base for L-shaped kitchen compositions',
+                'parameters' => [
+                    'width' => ['default' => 900, 'min' => 700, 'max' => 1200, 'unit' => 'mm'],
+                    'height' => ['default' => 720, 'min' => 500, 'max' => 1200, 'unit' => 'mm'],
+                    'depth' => ['default' => 900, 'min' => 700, 'max' => 1200, 'unit' => 'mm'],
+                    'carcass_thickness' => ['default' => 18, 'min' => 12, 'max' => 25, 'unit' => 'mm'],
+                    'back_thickness' => ['default' => 18, 'min' => 3, 'max' => 25, 'unit' => 'mm', 'recommended' => 18],
+                    'back_material_id' => ['type' => 'catalog_board', 'default' => null, 'label' => 'Back panel board'],
+                    'shutter_count' => ['default' => 1, 'min' => 0, 'max' => 2, 'unit' => 'pcs'],
+                    'door_type' => ['default' => 'HINGED', 'type' => 'enum', 'options' => ['HINGED', 'NONE']],
+                    'layout' => ['type' => 'layout', 'default' => self::defaultKitchenCornerLayout()],
+                ],
+            ],
             'KITCHEN_WALL' => [
                 'name' => 'Kitchen Wall Unit',
                 'category' => 'KITCHEN',
@@ -290,6 +306,25 @@ final class FurnitureTemplateCatalog
                 'width_mm' => null,
                 'sections' => [
                     ['type' => 'SHELVES', 'height_mm' => null, 'shelf_count' => 1, 'label' => 'Shelf'],
+                ],
+            ]],
+        ];
+    }
+
+    /** Blind corner: single bay with shelves (door on accessible face). */
+    public static function defaultKitchenCornerLayout(): array
+    {
+        return [
+            'plinth_height_mm' => 100,
+            'partition_thickness_mm' => 18,
+            'door_type' => 'HINGED',
+            'loft' => ['enabled' => false, 'height_mm' => 0, 'shelf_count' => 0],
+            'bays' => [[
+                'id' => 'bay-1',
+                'label' => 'Corner',
+                'width_mm' => null,
+                'sections' => [
+                    ['type' => 'SHELVES', 'height_mm' => null, 'shelf_count' => 2, 'label' => 'Corner shelves'],
                 ],
             ]],
         ];

@@ -209,6 +209,23 @@ final class FurnitureEngine
         return $this->get($tenantId, $id);
     }
 
+    /** @param array{x?:float|int,y?:float|int,z?:float|int,rotation?:float|int} $position */
+    public function updatePosition(int $tenantId, int $id, array $position): array
+    {
+        $this->get($tenantId, $id);
+        $pose = [
+            'x' => (float) ($position['x'] ?? 0),
+            'y' => (float) ($position['y'] ?? 0),
+            'z' => (float) ($position['z'] ?? 0),
+            'rotation' => (float) ($position['rotation'] ?? 0),
+        ];
+        $pdo = Database::connection();
+        $pdo->prepare('UPDATE furniture_instances SET position_json=?, updated_at=NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL')
+            ->execute([json_encode($pose), $id, $tenantId]);
+        Audit::record('UPDATE', 'furniture_instance_position', $id, null, $pose);
+        return $this->get($tenantId, $id);
+    }
+
     public function listByProject(int $tenantId, int $projectId): array
     {
         $pdo = Database::connection();
@@ -689,6 +706,18 @@ final class FurnitureEngine
         $pdo->prepare('UPDATE furniture_components SET deleted_at=NOW(), status=?, updated_at=NOW() WHERE id=? AND furniture_id=? AND tenant_id=?')
             ->execute(['DELETED', $componentId, $furnitureId, $tenantId]);
         Audit::record('DELETE', 'furniture_component', $componentId);
+    }
+
+    /** Soft-delete a furniture instance and its active components. */
+    public function softDelete(int $tenantId, int $id): void
+    {
+        $instance = $this->get($tenantId, $id);
+        $pdo = Database::connection();
+        $pdo->prepare('UPDATE furniture_components SET deleted_at=NOW(), status=?, updated_at=NOW() WHERE furniture_id=? AND tenant_id=? AND deleted_at IS NULL')
+            ->execute(['DELETED', $id, $tenantId]);
+        $pdo->prepare('UPDATE furniture_instances SET deleted_at=NOW(), updated_at=NOW() WHERE id=? AND tenant_id=? AND deleted_at IS NULL')
+            ->execute([$id, $tenantId]);
+        Audit::record('DELETE', 'furniture_instance', $id, $instance, ['deleted' => true]);
     }
 
     /**
