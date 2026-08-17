@@ -8,6 +8,13 @@ async function listTable(main, title, rows, columns) {
     </tbody></table></div>`;
 }
 
+function showPageError(main, err) {
+  const panel = document.createElement('div');
+  panel.className = 'panel error';
+  panel.textContent = err?.message || 'Request failed';
+  main.replaceChildren(panel);
+}
+
 export const pages = {
   async dashboard(main) {
     try {
@@ -25,10 +32,14 @@ export const pages = {
     }
   },
   async organizations(main) {
-    const res = await api.get('/api/v1/organizations');
-    await listTable(main, 'Organizations', res.data.map(o => ({
-      id: o.id, name: o.name, code: o.code, status: o.status,
-    })), ['id', 'name', 'code', 'status']);
+    try {
+      const res = await api.get('/api/v1/organizations');
+      await listTable(main, 'Organizations', res.data.map(o => ({
+        id: o.id, name: o.name, code: o.code, status: o.status,
+      })), ['id', 'name', 'code', 'status']);
+    } catch (e) {
+      showPageError(main, e);
+    }
   },
   async clients(main) {
     main.innerHTML = `<div class="panel"><h2>Clients</h2>
@@ -40,22 +51,37 @@ export const pages = {
         <div><button>Create Client</button></div>
       </form><div id="client-list"></div></div>`;
     const refresh = async () => {
-      const res = await api.get('/api/v1/clients');
-      document.getElementById('client-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Company</th><th>Email</th></tr></thead>
-        <tbody>${res.data.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.name)}</td><td>${esc(c.company || '')}</td><td>${esc(c.email || '')}</td></tr>`).join('')}</tbody></table>`;
+      try {
+        const res = await api.get('/api/v1/clients');
+        document.getElementById('client-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Company</th><th>Email</th></tr></thead>
+          <tbody>${res.data.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.name)}</td><td>${esc(c.company || '')}</td><td>${esc(c.email || '')}</td></tr>`).join('')}</tbody></table>`;
+      } catch (e) {
+        showPageError(main, e);
+      }
     };
     document.getElementById('client-form').onsubmit = async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      await api.post('/api/v1/clients', Object.fromEntries(fd.entries()));
-      e.target.reset();
-      refresh();
+      try {
+        const fd = new FormData(e.target);
+        await api.post('/api/v1/clients', Object.fromEntries(fd.entries()));
+        e.target.reset();
+        refresh();
+      } catch (err) {
+        showPageError(main, err);
+      }
     };
     refresh();
   },
   async projects(main) {
-    const clients = await api.get('/api/v1/clients');
-    const orgs = await api.get('/api/v1/organizations');
+    let clients;
+    let orgs;
+    try {
+      clients = await api.get('/api/v1/clients');
+      orgs = await api.get('/api/v1/organizations');
+    } catch (e) {
+      showPageError(main, e);
+      return;
+    }
     main.innerHTML = `<div class="panel"><h2>Projects</h2>
       <form id="project-form" class="grid grid-2">
         <div><label>Name</label><input name="name" required /></div>
@@ -64,36 +90,44 @@ export const pages = {
         <div><button>Create Project</button></div>
       </form><div id="project-list"></div></div>`;
     const refresh = async () => {
-      const res = await api.get('/api/v1/projects');
-      document.getElementById('project-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Mode</th><th>Status</th><th>Workflow</th><th>Open</th></tr></thead>
-        <tbody>${res.data.map(p => `<tr>
-          <td>${esc(p.id)}</td>
-          <td>${esc(p.name)}</td>
-          <td><span class="badge">${esc(p.model_mode || 'FURNITURE_FIRST')}</span></td>
-          <td>${esc(p.status)}</td>
-          <td>${esc(p.workflow_stage)}</td>
-          <td>
-            <button data-id="${esc(p.id)}" class="open-furniture">Furniture</button>
-            <button data-id="${esc(p.id)}" class="open-project secondary">Floor</button>
-          </td>
-        </tr>`).join('')}</tbody></table>`;
-      document.querySelectorAll('.open-furniture').forEach(btn => btn.onclick = () => {
-        localStorage.setItem('fmos_project_id', btn.dataset.id);
-        location.hash = '#furniture';
-      });
-      document.querySelectorAll('.open-project').forEach(btn => btn.onclick = () => {
-        localStorage.setItem('fmos_project_id', btn.dataset.id);
-        location.hash = '#designer';
-      });
+      try {
+        const res = await api.get('/api/v1/projects');
+        document.getElementById('project-list').innerHTML = `<table><thead><tr><th>ID</th><th>Name</th><th>Mode</th><th>Status</th><th>Workflow</th><th>Open</th></tr></thead>
+          <tbody>${res.data.map(p => `<tr>
+            <td>${esc(p.id)}</td>
+            <td>${esc(p.name)}</td>
+            <td><span class="badge">${esc(p.model_mode || 'FURNITURE_FIRST')}</span></td>
+            <td>${esc(p.status)}</td>
+            <td>${esc(p.workflow_stage)}</td>
+            <td>
+              <button data-id="${esc(p.id)}" class="open-furniture">Furniture</button>
+              <button data-id="${esc(p.id)}" class="open-project secondary">Floor</button>
+            </td>
+          </tr>`).join('')}</tbody></table>`;
+        document.querySelectorAll('.open-furniture').forEach(btn => btn.onclick = () => {
+          localStorage.setItem('fmos_project_id', btn.dataset.id);
+          location.hash = '#furniture';
+        });
+        document.querySelectorAll('.open-project').forEach(btn => btn.onclick = () => {
+          localStorage.setItem('fmos_project_id', btn.dataset.id);
+          location.hash = '#designer';
+        });
+      } catch (e) {
+        showPageError(main, e);
+      }
     };
     document.getElementById('project-form').onsubmit = async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const body = Object.fromEntries(fd.entries());
-      body.organization_id = Number(body.organization_id);
-      body.client_id = Number(body.client_id);
-      await api.post('/api/v1/projects', body);
-      refresh();
+      try {
+        const fd = new FormData(e.target);
+        const body = Object.fromEntries(fd.entries());
+        body.organization_id = Number(body.organization_id);
+        body.client_id = Number(body.client_id);
+        await api.post('/api/v1/projects', body);
+        refresh();
+      } catch (err) {
+        showPageError(main, err);
+      }
     };
     refresh();
   },

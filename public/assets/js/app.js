@@ -20,6 +20,9 @@ export async function boot() {
     }
     renderShell(state);
   } catch {
+    api.setToken(null);
+    api.setCsrf(null);
+    state.user = null;
     if (!AUTH_ROUTES.has(state.route) && state.route !== '') {
       location.hash = '#login';
       state.route = 'login';

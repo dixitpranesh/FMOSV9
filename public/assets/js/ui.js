@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { pages } from './pages.js';
+import { esc } from './security.js';
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '';
@@ -53,6 +54,7 @@ export function renderLogin() {
           ·
           <a href="#register">Create account</a>
         </p>
+        <p class="muted" style="margin-top:0.75rem;font-size:0.9rem">Workspace login (after seed): <code>owner@demo.fmos</code> — platform accounts cannot open Organizations / Catalog.</p>
         <div id="login-resend" style="display:none;margin-top:0.75rem">
           <button type="button" class="secondary" id="resend-from-login">Resend verification email</button>
         </div>
@@ -394,8 +396,22 @@ function renderRegister(main) {
   };
 }
 
+function renderNoTenant(main, user) {
+  const email = user?.email || 'this account';
+  main.innerHTML = `<div class="panel">
+    <h2>Tenant workspace required</h2>
+    <p><code>${esc(email)}</code> is a platform account (no factory/tenant). Calls to Organizations, Clients, and Catalog return <strong>403 Tenant context required</strong>.</p>
+    <p>Log out and sign in as a tenant owner, for example the seeded demo user:</p>
+    <ul>
+      <li><code>owner@demo.fmos</code> / <code>Password123!</code></li>
+    </ul>
+    <p class="muted">Or create a company account via Sign up. Platform users (<code>platform@fmos.local</code>, <code>support@fmos.local</code>) are for admin tooling only.</p>
+  </div>`;
+}
+
 export function renderShell(appState) {
   const nav = document.getElementById('nav');
+  const hasTenant = !!appState.user?.tenant_id;
   const links = [
     ['dashboard', 'Dashboard'],
     ['organizations', 'Organizations'],
@@ -409,10 +425,10 @@ export function renderShell(appState) {
     ['nesting', 'Nesting/Labels'],
   ];
   nav.innerHTML = links.map(([id, label]) =>
-    `<a href="#${id}" class="${appState.route === id ? 'active' : ''}">${label}</a>`
+    `<a href="#${id}" class="${appState.route === id ? 'active' : ''}">${esc(label)}</a>`
   ).join('');
   document.getElementById('user-box').innerHTML = `
-    <span class="muted">${appState.user?.name || ''} · ${appState.user?.email || ''}</span>
+    <span class="muted">${esc(appState.user?.name || '')} · ${esc(appState.user?.email || '')}${hasTenant ? '' : ' · platform'}</span>
     <button class="secondary" id="logout-btn" style="margin-left:0.5rem">Logout</button>`;
   document.getElementById('logout-btn').onclick = async () => {
     try { await api.post('/api/v1/auth/logout', {}); } catch {}
@@ -422,6 +438,11 @@ export function renderShell(appState) {
     location.hash = '#login';
     renderLogin();
   };
+  const main = document.getElementById('main');
+  if (!hasTenant) {
+    renderNoTenant(main, appState.user);
+    return;
+  }
   const page = pages[appState.route] || pages.dashboard;
-  page(document.getElementById('main'), appState);
+  page(main, appState);
 }

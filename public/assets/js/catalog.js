@@ -39,8 +39,13 @@ export async function mountCatalog(main) {
   };
 
   const refresh = async () => {
-    if (mode === 'laminates') await renderLaminates();
-    else await renderProducts();
+    try {
+      if (mode === 'laminates') await renderLaminates();
+      else await renderProducts();
+    } catch (e) {
+      const el = document.getElementById('cat-list');
+      if (el) el.innerHTML = `<p class="error">${esc(e.message || 'Request failed')}</p>`;
+    }
   };
 
   document.getElementById('tab-products').onclick = () => { mode = 'products'; refresh(); };
