@@ -35,3 +35,6 @@ Thumbs.db
 # Test artifacts
 /tests/output/
 .phpunit.result.cache
+
+# Server-generated logs
+/error_log
