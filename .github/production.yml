@@ -1,0 +1,143 @@
+name: FMOS Production CI/CD
+
+on:
+  push:
+    branches:
+      - master
+
+  workflow_dispatch:
+
+concurrency:
+  group: fmos-production
+  cancel-in-progress: false
+
+jobs:
+
+  # ==================================================
+  # CI - TEST
+  # ==================================================
+
+  test:
+    name: Test FMOS
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo, pdo_mysql
+          coverage: none
+
+      - name: Validate Composer
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: PHP syntax check
+        run: |
+          find src bin public -name "*.php" -print0 | xargs -0 -n1 php -l
+
+      - name: Run application tests
+        run: composer test
+
+
+  # ==================================================
+  # CD - PRODUCTION
+  # ==================================================
+
+  deploy:
+    name: Deploy to MilesWeb
+    needs: test
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+      url: https://app.fmos.in
+
+    steps:
+
+      - name: Deploy through SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.MILESWEB_HOST }}
+          port: ${{ secrets.MILESWEB_PORT }}
+          username: ${{ secrets.MILESWEB_USER }}
+          key: ${{ secrets.MILESWEB_SSH_KEY }}
+          script_stop: true
+
+          script: |
+            set -e
+
+            APP_DIR="/home/fuiyrsce/app.fmos.in"
+
+            echo "=========================================="
+            echo "FMOS Production Deployment"
+            echo "=========================================="
+
+            cd "$APP_DIR"
+
+            echo ""
+            echo "Current production commit:"
+            git rev-parse --short HEAD
+
+            echo ""
+            echo "Fetching GitHub..."
+            git fetch origin
+
+            echo ""
+            echo "Checking production working tree..."
+
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "ERROR: Production working tree is not clean."
+              git status --short
+              exit 1
+            fi
+
+            echo ""
+            echo "Deploying master..."
+            git pull --ff-only origin master
+
+            echo ""
+            echo "Installing Composer dependencies..."
+            composer install \
+              --no-dev \
+              --prefer-dist \
+              --optimize-autoloader \
+              --no-interaction
+
+            echo ""
+            echo "Running database migrations..."
+            php bin/migrate.php
+
+            echo ""
+            echo "Running production health check..."
+
+            HTTP_CODE=$(curl \
+              --silent \
+              --output /tmp/fmos-health.json \
+              --write-out "%{http_code}" \
+              https://app.fmos.in/api/v1/health)
+
+            cat /tmp/fmos-health.json
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo ""
+              echo "ERROR: Health check failed."
+              echo "HTTP status: $HTTP_CODE"
+              exit 1
+            fi
+
+            echo ""
+            echo "Deployed commit:"
+            git rev-parse --short HEAD
+
+            echo ""
+            echo "=========================================="
+            echo "FMOS DEPLOYMENT SUCCESSFUL"
+            echo "=========================================="
