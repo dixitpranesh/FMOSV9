@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Allow Let's Encrypt / ACME validation
+RewriteRule ^\.well-known/ - [L]
+
+# Serve existing files and directories directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Send all other requests to the FMOS front controller
+RewriteRule ^ index.php [L]
