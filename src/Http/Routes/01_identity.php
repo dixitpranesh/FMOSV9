@@ -8,6 +8,7 @@ use Fmos\Core\Audit;
 use Fmos\Core\Auth;
 use Fmos\Core\AuthException;
 use Fmos\Core\Database;
+use Fmos\Core\Logger;
 use Fmos\Core\Request;
 use Fmos\Core\Response;
 use Fmos\Domains\Identity\EmailVerificationService;
@@ -69,6 +70,8 @@ $router->post('/api/v1/auth/register', static function (Request $request) use ($
         $payload = [
             'message' => $result['message'],
             'csrf' => Auth::csrfToken(),
+            'email_sent' => $result['email_sent'] ?? null,
+            'registration_id' => $result['registration_id'] ?? Logger::requestId(),
         ];
         if (!empty($result['debug_verify_token'])) {
             $payload['debug_verify_token'] = $result['debug_verify_token'];
@@ -77,6 +80,10 @@ $router->post('/api/v1/auth/register', static function (Request $request) use ($
     } catch (\InvalidArgumentException $e) {
         Response::error('VALIDATION_ERROR', $e->getMessage(), 422);
     } catch (\Throwable $e) {
+        Logger::event('REGISTRATION_FAILED', Logger::LEVEL_ERROR, [
+            'exception_class' => $e::class,
+            'message' => Logger::sanitizeMessage($e->getMessage()),
+        ]);
         Response::error('REGISTRATION_FAILED', 'Unable to complete registration. Please check the information provided and try again.', 400);
     }
 }, false);

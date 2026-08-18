@@ -87,6 +87,8 @@ $ind = $reg->register([
     'marketing_email_consent' => false,
 ]);
 assertTrue($ind['ok'] === true, 'independent designer registers');
+assertTrue(($ind['email_sent'] ?? null) === true, 'verification email marked sent under log driver');
+assertTrue(!empty($ind['registration_id']), 'registration_id returned');
 assertTrue(!empty($ind['debug_verify_token']), 'verify token available under log mailer');
 $userId = (int) $ind['user_id'];
 $row = $pdo->prepare('SELECT status, email_verified_at FROM users WHERE id = ?');

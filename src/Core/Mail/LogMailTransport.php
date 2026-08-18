@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Fmos\Core\Mail;
 
 use Fmos\Core\Env;
+use Fmos\Core\Logger;
 
 final class LogMailTransport implements MailTransport
 {
@@ -24,9 +25,23 @@ final class LogMailTransport implements MailTransport
             'html' => $htmlBody,
             'text' => $textBody,
             'sent_at' => date('c'),
+            'email_type' => $meta['email_type'] ?? null,
         ];
         file_put_contents($file, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
-        return ['ok' => true, 'path' => $file];
+
+        Logger::event('EMAIL_SENT_TO_LOG_DRIVER', Logger::LEVEL_INFO, [
+            'email_type' => $meta['email_type'] ?? 'transactional',
+            'mail_driver' => 'log',
+            'path' => $file,
+            'recipient_domains' => array_values(array_unique(array_map(
+                static fn (string $e): string => Logger::emailDomain($e),
+                $to
+            ))),
+            'from_domain' => Logger::fromDomain((string) ($meta['from'] ?? '')),
+            'subject_length' => strlen($subject),
+        ], Logger::CHANNEL_EMAIL);
+
+        return ['ok' => true, 'path' => $file, 'driver' => 'log'];
     }
 
     private function dir(): string

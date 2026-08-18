@@ -34,25 +34,80 @@ final class Auth
     public static function attempt(string $email, string $password): ?array
     {
         $email = strtolower(trim($email));
+        $domain = Logger::emailDomain($email);
+        Logger::event('LOGIN_STARTED', Logger::LEVEL_INFO, [
+            'email_domain' => $domain,
+        ]);
+
         $pdo = Database::connection();
+        Logger::event('USER_LOOKUP', Logger::LEVEL_DEBUG, [
+            'email_domain' => $domain,
+        ]);
         $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         if (!$user || !password_verify($password, $user['password_hash'])) {
             if ($user) {
                 self::recordFailedLogin((int) $user['id']);
+                Logger::event('PASSWORD_VALIDATION_FAILED', Logger::LEVEL_WARNING, [
+                    'user_id' => (int) $user['id'],
+                    'email_domain' => $domain,
+                ]);
+                Logger::event('LOGIN_FAILED', Logger::LEVEL_WARNING, [
+                    'user_id' => (int) $user['id'],
+                    'email_domain' => $domain,
+                    'reason' => 'invalid_credentials',
+                ]);
+            } else {
+                Logger::event('USER_NOT_FOUND', Logger::LEVEL_WARNING, [
+                    'email_domain' => $domain,
+                ]);
+                Logger::event('LOGIN_FAILED', Logger::LEVEL_WARNING, [
+                    'email_domain' => $domain,
+                    'reason' => 'user_not_found',
+                ]);
             }
             return null;
         }
 
+        Logger::event('PASSWORD_VALIDATION_SUCCESS', Logger::LEVEL_INFO, [
+            'user_id' => (int) $user['id'],
+            'email_domain' => $domain,
+        ]);
+        Logger::correlate(['user_id' => (int) $user['id']]);
+
         $status = (string) ($user['status'] ?? 'ACTIVE');
         if (in_array($status, ['SUSPENDED', 'LOCKED', 'DEACTIVATED'], true)) {
+            Logger::event('LOGIN_FAILED', Logger::LEVEL_WARNING, [
+                'user_id' => (int) $user['id'],
+                'reason' => 'account_disabled',
+                'status' => $status,
+            ]);
             throw new AuthException('ACCOUNT_DISABLED', 'This account cannot sign in.', 403);
         }
         if (!empty($user['locked_until']) && strtotime((string) $user['locked_until']) > time()) {
+            Logger::event('LOGIN_FAILED', Logger::LEVEL_WARNING, [
+                'user_id' => (int) $user['id'],
+                'reason' => 'account_locked',
+            ]);
             throw new AuthException('ACCOUNT_LOCKED', 'Too many failed attempts. Try again later.', 423);
         }
+
+        Logger::event('EMAIL_VERIFICATION_CHECK', Logger::LEVEL_DEBUG, [
+            'user_id' => (int) $user['id'],
+            'status' => $status,
+            'email_verified' => !empty($user['email_verified_at']),
+        ]);
+
         if ($status === 'PENDING_EMAIL_VERIFICATION' || empty($user['email_verified_at'])) {
+            Logger::event('EMAIL_NOT_VERIFIED', Logger::LEVEL_INFO, [
+                'user_id' => (int) $user['id'],
+                'email_domain' => $domain,
+            ]);
+            Logger::event('LOGIN_BLOCKED_EMAIL_NOT_VERIFIED', Logger::LEVEL_WARNING, [
+                'user_id' => (int) $user['id'],
+                'email_domain' => $domain,
+            ]);
             throw new AuthException(
                 'EMAIL_NOT_VERIFIED',
                 'Your email address has not been verified. Please verify your email before signing in.',
@@ -64,6 +119,11 @@ final class Auth
             ->execute([(int) $user['id']]);
 
         self::login($user);
+        Logger::event('LOGIN_SUCCESS', Logger::LEVEL_INFO, [
+            'user_id' => (int) $user['id'],
+            'email_domain' => $domain,
+            'tenant_id' => $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null,
+        ]);
         return self::publicUser($user);
     }
 
