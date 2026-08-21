@@ -11,6 +11,16 @@ function currentRoute() {
 
 export async function boot() {
   state.route = currentRoute();
+  // Skip /auth/me when there is no stored token — avoids a noisy expected 401 in DevTools.
+  if (!api.token()) {
+    state.user = null;
+    if (!AUTH_ROUTES.has(state.route) && state.route !== '') {
+      location.hash = '#login';
+      state.route = 'login';
+    }
+    renderLogin();
+    return;
+  }
   try {
     const me = await api.get('/api/v1/auth/me');
     state.user = me.data;

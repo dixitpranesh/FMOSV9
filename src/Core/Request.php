@@ -63,7 +63,11 @@ final class Request
 
     public function bearerToken(): ?string
     {
-        $auth = $this->headers['Authorization'] ?? $this->header('Authorization', '') ?? '';
+        $auth = $this->headers['Authorization']
+            ?? $this->header('Authorization', '')
+            ?? $this->server['HTTP_AUTHORIZATION']
+            ?? $this->server['REDIRECT_HTTP_AUTHORIZATION']
+            ?? '';
         if (preg_match('/^Bearer\s+(.+)$/i', (string) $auth, $m)) {
             return trim($m[1]);
         }

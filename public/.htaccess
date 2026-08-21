@@ -3,6 +3,10 @@ RewriteEngine On
 # Allow Let's Encrypt / ACME validation
 RewriteRule ^\.well-known/ - [L]
 
+# Pass Authorization to PHP (cPanel/Apache often strips it otherwise → /auth/me 401 with Bearer)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
 # Serve existing files and directories directly
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

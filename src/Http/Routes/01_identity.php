@@ -60,7 +60,7 @@ $router->get('/api/v1/auth/me', static function () {
         return;
     }
     Response::json(Auth::publicUser($user));
-});
+}, false);
 
 $router->post('/api/v1/auth/register', static function (Request $request) use ($clientIp) {
     RateLimiter::allowOrFail('register', $clientIp(), 10, 3600);
