@@ -71,6 +71,19 @@ if (($status['mail_driver'] ?? '') !== 'smtp') {
     exit(2);
 }
 
-echo "  OK — driver is smtp. A registration should log SMTP_CONNECTION_* events.\n";
-echo "  If inbox is still empty after that, inspect SMTP_AUTH_FAILED / connection errors in email-*.log.\n";
-exit(0);
+echo "  OK — driver is smtp.\n";
+
+echo "\nLive SMTP probe (connect + AUTH, no message send):\n";
+$probe = (new \Fmos\Core\Mail\SmtpMailTransport())->probe();
+echo '  steps: ' . implode(' -> ', $probe['steps'] ?? []) . "\n";
+if (!empty($probe['ok'])) {
+    echo "  PROBE OK — SMTP auth succeeded. Resend verification from the app next.\n";
+    exit(0);
+}
+
+echo '  PROBE FAIL — ' . ($probe['error_type'] ?? 'ERROR') . ': ' . ($probe['error'] ?? 'unknown') . "\n";
+echo "  Try on server:\n";
+echo "    1) MAIL_HOST=localhost   (same machine as cPanel mail)\n";
+echo "    2) Or MAIL_PORT=465 and MAIL_ENCRYPTION=ssl\n";
+echo "    3) Or MAIL_HOST=<server hostname from cPanel Connect Devices>\n";
+exit(3);
