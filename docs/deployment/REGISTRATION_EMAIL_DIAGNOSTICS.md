@@ -1,6 +1,27 @@
 # Registration & verification email diagnostics
 
-## Goal
+## Browser console vs server logs
+
+**These diagnostics do NOT appear in Chrome/Firefox DevTools Console.**
+
+They are written on the server under `storage/logs/`. Validate with:
+
+1. Browser **Network** tab → `POST /api/v1/auth/register` → Response JSON  
+   - `registration_id` (e.g. `reg_20260818_…`)  
+   - `email_sent` (`true` / `false`)  
+   - Response header `X-Request-Id`
+2. cPanel **File Manager** → application root (parent of `public/`) → `storage/logs/`  
+   - `app-YYYY-MM-DD.log`  
+   - `email-YYYY-MM-DD.log`
+3. cPanel **Errors** / PHP `error_log` — look for `[FMOS]` when file writes fail or on ERROR events.
+
+If the user row exists in MySQL but `storage/logs` is empty:
+
+- Confirm deploy includes commit with `Logger::event('REGISTRATION_…')` (not an older build).
+- Confirm `storage/` and `storage/logs/` are writable by the PHP user (`chmod 775` / correct owner).
+- Search File Manager for `app.log` under the real app root (not only under `public/`).
+
+---
 
 After a user registers and does not receive a verification email, answer from logs alone:
 

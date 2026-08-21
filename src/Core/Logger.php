@@ -62,7 +62,9 @@ final class Logger
         $level = strtoupper($level);
         $dir = self::logDir();
         if (!is_dir($dir)) {
-            @mkdir($dir, 0775, true);
+            if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
+                error_log('[FMOS][LOGGER] cannot create log dir: ' . $dir);
+            }
         }
 
         $payload = array_merge(self::$correlation, $context);
@@ -76,6 +78,7 @@ final class Logger
             'request_id' => self::requestId(),
             'message' => self::sanitizeMessage($message),
             'context' => $payload,
+            'log_dir' => $dir,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if ($line === false) {
@@ -83,22 +86,38 @@ final class Logger
         }
 
         $date = date('Y-m-d');
-        @file_put_contents($dir . '/app-' . $date . '.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+        $wrote = self::append($dir . '/app-' . $date . '.log', $line);
 
         if ($channel === self::CHANNEL_EMAIL || str_starts_with((string) ($payload['event'] ?? ''), 'EMAIL_')
             || str_starts_with((string) ($payload['event'] ?? ''), 'SMTP_')
             || str_starts_with((string) ($payload['event'] ?? ''), 'VERIFICATION_EMAIL')) {
-            @file_put_contents($dir . '/email-' . $date . '.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+            self::append($dir . '/email-' . $date . '.log', $line);
         }
 
         if (in_array($level, [self::LEVEL_ERROR, self::LEVEL_CRITICAL], true)) {
-            @file_put_contents($dir . '/error-' . $date . '.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+            self::append($dir . '/error-' . $date . '.log', $line);
         }
 
         // Keep legacy path for older tooling.
-        @file_put_contents($dir . '/app.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+        self::append($dir . '/app.log', $line);
+
+        // Mirror to PHP error_log when file write fails, or for ERROR/CRITICAL (cPanel Errors UI).
+        if (!$wrote || in_array($level, [self::LEVEL_ERROR, self::LEVEL_CRITICAL], true)) {
+            $event = (string) ($payload['event'] ?? '');
+            error_log('[FMOS][' . $level . '][' . ($event !== '' ? $event : 'LOG') . '] ' . $line);
+        }
 
         self::pruneOldLogs($dir, 14);
+    }
+
+    private static function append(string $path, string $line): bool
+    {
+        $ok = @file_put_contents($path, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+        if ($ok === false) {
+            error_log('[FMOS][LOGGER] write failed: ' . $path . ' (check ownership/permissions on storage/logs)');
+            return false;
+        }
+        return true;
     }
 
     public static function event(string $event, string $level = self::LEVEL_INFO, array $context = [], string $channel = self::CHANNEL_APP): void
