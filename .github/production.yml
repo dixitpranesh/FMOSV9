@@ -64,17 +64,20 @@ jobs:
 
       - name: Deploy through SSH
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          GH_DEPLOY_TOKEN: ${{ secrets.GH_DEPLOY_TOKEN }}
         with:
           host: ${{ secrets.MILESWEB_HOST }}
           port: ${{ secrets.MILESWEB_PORT }}
           username: ${{ secrets.MILESWEB_USER }}
           key: ${{ secrets.MILESWEB_SSH_KEY }}
+          envs: GH_DEPLOY_TOKEN
           script_stop: true
-
           script: |
             set -e
 
             APP_DIR="/home/fuiyrsce/app.fmos.in"
+            REPO_HTTPS="https://github.com/dixitpranesh/FMOSV9.git"
 
             echo "=========================================="
             echo "FMOS Production Deployment"
@@ -87,8 +90,18 @@ jobs:
             git rev-parse --short HEAD
 
             echo ""
+            echo "Configuring origin over HTTPS (avoids blocked git SSH/22)..."
+            if [ -n "${GH_DEPLOY_TOKEN:-}" ]; then
+              git remote set-url origin "https://x-access-token:${GH_DEPLOY_TOKEN}@github.com/dixitpranesh/FMOSV9.git"
+            else
+              git remote set-url origin "$REPO_HTTPS"
+            fi
+
+            echo ""
             echo "Fetching GitHub..."
             git fetch origin
+
+            git remote set-url origin "$REPO_HTTPS"
 
             echo ""
             echo "Checking production working tree..."
