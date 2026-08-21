@@ -21,7 +21,14 @@ final class Mailer
             $this->driver = 'custom';
             return;
         }
-        $this->driver = strtolower((string) (Env::get('MAIL_DRIVER', 'log') ?? 'log'));
+        $this->driver = strtolower(trim((string) (Env::get('MAIL_DRIVER', 'log') ?? 'log')));
+        if ($this->driver !== 'smtp' && $this->driver !== 'log') {
+            Logger::warning('Unknown MAIL_DRIVER; falling back to log', [
+                'event' => 'MAIL_DRIVER_INVALID',
+                'mail_driver' => $this->driver,
+            ]);
+            $this->driver = 'log';
+        }
         $this->transport = $this->driver === 'smtp' ? new SmtpMailTransport() : new LogMailTransport();
     }
 

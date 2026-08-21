@@ -188,14 +188,16 @@ final class Logger
 
     public static function mailConfigStatus(): array
     {
-        $driver = strtolower((string) (Env::get('MAIL_DRIVER', 'log') ?? 'log'));
+        $driver = strtolower(trim((string) (Env::get('MAIL_DRIVER', 'log') ?? 'log')));
         $host = Env::get('MAIL_HOST');
         $user = Env::get('MAIL_USERNAME');
         $pass = Env::get('MAIL_PASSWORD');
         $from = Env::get('MAIL_FROM_ADDRESS') ?: Env::get('MAIL_FROM_ACCOUNTS', 'accounts@fmos.in');
         return [
             'mail_driver' => $driver,
+            'mail_driver_is_smtp' => $driver === 'smtp',
             'smtp_host_configured' => is_string($host) && $host !== '',
+            'smtp_host' => is_string($host) ? $host : '',
             'smtp_port' => (int) (Env::get('MAIL_PORT', '587') ?? '587'),
             'smtp_encryption' => strtolower((string) (Env::get('MAIL_ENCRYPTION', 'tls') ?? 'tls')),
             'smtp_username_configured' => is_string($user) && $user !== '',
