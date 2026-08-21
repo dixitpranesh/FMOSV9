@@ -129,6 +129,10 @@ jobs:
             git rev-parse --short HEAD
 
             echo ""
+            echo "Mail driver (safe check):"
+            php -r 'require "vendor/autoload.php"; Fmos\Core\Env::load(".env"); echo Fmos\Core\Env::get("MAIL_DRIVER","log"), PHP_EOL;'
+
+            echo ""
             echo "=========================================="
             echo "FMOS DEPLOYMENT SUCCESSFUL"
             echo "=========================================="

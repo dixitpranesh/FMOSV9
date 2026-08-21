@@ -14,6 +14,9 @@ They are written on the server under `storage/logs/`. Validate with:
    - `app-YYYY-MM-DD.log`  
    - `email-YYYY-MM-DD.log`
 3. cPanel **Errors** / PHP `error_log` — look for `[FMOS]` when file writes fail or on ERROR events.
+4. On the server app root, run: `php bin/mail_diagnostics.php`  
+   - Must print `mail_driver: smtp` and `mail_driver_is_smtp: true`  
+   - If it prints `mail_driver: log`, **no Gmail delivery is possible** — fix `.env` first
 
 If the user row exists in MySQL but `storage/logs` is empty:
 
